@@ -40,6 +40,7 @@
 # include "newstr.h"
 
 static LIST *headers1( const char *file, LIST *hdrscan );
+static LIST *headers1fs( const char *file, LIST *hdrscan );
 
 /*
  * headers() - scan a target for include files and call HDRRULE
@@ -52,23 +53,27 @@ headers( TARGET *t )
 {
 	LIST	*hdrscan;
 	LIST	*hdrrule;
-	LIST	*hdrcache;
+	int hdr_full_scan;
 	LOL	lol;
 
 	if( !( hdrscan = var_get( "HDRSCAN" ) ) || 
 	    !( hdrrule = var_get( "HDRRULE" ) ) )
 	        return;
+	hdr_full_scan = var_get( "HDRFS" ) != NULL;
 
 	/* Doctor up call to HDRRULE rule */
 	/* Call headers1() to get LIST of included files. */
 
 	if( DEBUG_HEADER )
-	    printf( "header scan %s\n", t->name );
+	    printf( "header scan %s (fs=%d)\n", t->name, hdr_full_scan );
 
 	lol_init( &lol );
 
 	lol_add( &lol, list_new( L0, t->name, 1 ) );
-	lol_add( &lol, headers1( t->boundname, hdrscan ) );
+	if ( !hdr_full_scan )
+  	lol_add( &lol, headers1( t->boundname, hdrscan ) );
+  else
+  	lol_add( &lol, headers1fs( t->boundname, hdrscan ) );
 
 	if( lol_get( &lol, 1 ) )
 	    list_free( evaluate_rule( hdrrule->string, &lol, L0 ) );
@@ -125,6 +130,73 @@ headers1(
 	    free( (char *)re[--rec] );
 
 	fclose( f );
+
+	return result;
+}
+
+/*
+ * headers1fs() - using regexp, fully scan a file (not only 1 header/line) and build include LIST
+ */
+
+static LIST *
+headers1fs( 
+	const char *file,
+	LIST *hdrscan )
+{
+	FILE	*f;
+	int	i;
+	int	rec = 0;
+	LIST	*result = 0;
+	regexp	*re[ MAXINC ];
+	char	*buf, *pbuf;
+	int len, found;
+
+	if( !( f = fopen( file, "r" ) ) )
+	    return result;
+
+	while( rec < MAXINC && hdrscan )
+	{
+	    re[rec++] = regcomp( hdrscan->string );
+	    hdrscan = list_next( hdrscan );
+	}
+
+	fseek ( f, 0, SEEK_END );
+	len = ftell ( f );
+	fseek ( f, 0, SEEK_SET );
+	buf = malloc ( len + 16 );
+	len = (int)fread ( buf, 1, len, f );
+	buf[len] = '\0';
+	fclose ( f );
+
+	pbuf = buf;
+	found = 1;
+	if( DEBUG_HEADER )
+	  printf ( "full contemts: %s\n", buf );
+	while ( pbuf < buf+len && found )
+	{
+	  found = 0;
+    for( i = 0; i < rec; i++ )
+  		if( regexec( re[i], pbuf ) && re[i]->startp[1] )
+	    {
+    		/* Copy and terminate extracted string. */
+
+    		char buf2[ MAXSYM ];
+    		int l = re[i]->endp[1] - re[i]->startp[1];
+    		memcpy( buf2, re[i]->startp[1], l );
+    		buf2[ l ] = 0;
+    		result = list_new( result, buf2, 0 );
+
+    		pbuf = (char*)re[i]->endp[1];
+    		if( DEBUG_HEADER )
+    		    printf( "header found: %s (%d char left)\n", buf2, (int)(buf+len-pbuf));
+    		found = 1;
+    		break;
+	    }
+	}
+	free ( buf );
+
+	while( rec )
+	    free( (char *)re[--rec] );
 
 	return result;
 }

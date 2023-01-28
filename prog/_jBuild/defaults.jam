@@ -1,0 +1,412 @@
+if ! $(__DEFAULTS_INCLUDED) {
+  if $(JAMVERSION) != 2.5-G8 {
+    Exit Jam 2.5-G8 required (found: $(JAMVERSION))! Please, update. ;
+  }
+  __DEFAULTS_INCLUDED = 1 ;
+
+  Root      ?= ./ ;
+
+  NOCARE $(Root)/prog/platform.jam ;
+  include $(Root)/prog/platform.jam ;
+
+  include $(Root)/prog/_jBuild/defPlatform.jam ;
+
+  PlatformSpec_win32 ?= vc16 ;
+  PlatformSpec_win64 ?= vc16 ;
+  PlatformSpec_macosx ?= clang64 ;
+  PlatformSpec_linux64 ?= gcc4 ;
+  CLangVer ?= 14.0.6 ;
+  DefaultCPPStd = 17 ;
+  CPPStd ?= 17 ;
+  Sanitize ?= disabled ;
+  NoMemBaseInclude ?= no ;
+
+  switch $(Platform) {
+    case win32 :   PlatformSpec ?= $(PlatformSpec_win32) ;
+    case win64 :   PlatformSpec ?= $(PlatformSpec_win64) ;
+    case macosx :  PlatformSpec ?= $(PlatformSpec_macosx) ;
+    case linux64 : PlatformSpec ?= $(PlatformSpec_linux64) ;
+    case * :       PlatformSpec ?= none ;
+  }
+  if $(PlatformSpec) = vc16
+  {
+    VCUpdateVer ?= 16.10.3 ;
+  } else if $(PlatformSpec) = vc15
+  {
+    VCUpdateVer ?= 15.9.5 ;
+  } else
+  {
+    VCUpdateVer ?= 3 ;
+  }
+
+  if $(PlatformSpec) = clang {
+    IncludeSystemDir ?= -isystem ;
+    IncludeMSVCDir ?= -imsvc ;
+  }
+
+  IncludeSystemDir ?= -I ;
+  IncludeMSVCDir ?= -I ;
+
+  DefQtVer      = 4.7.3 ;
+
+  Config        ?= dev ;
+  CoreLinkage   ?= static ;
+  DriverLinkage ?= static ;
+  StarForce     ?= no ;
+  MacOSXVer     ?= 10.11 ;
+  MacOSXMinVer  ?= $(MacOSXVer) ;
+  MacOSXArch    ?= x86_64 ;
+  WinSdkVer     ?= win.sdk.100 ;
+  DirectXVer    ?= jun2010 ;
+  UseD3DMulti   ?= no ;
+  MSVectorcall  ?= no ;
+  DefBulletSdkVer  ?= 2.82 ;
+  BulletSdkVer  ?= $(DefBulletSdkVer) ;
+  ForceLogs     ?= no ;
+  UsePCH        ?= no ;
+  PrecompiledName ?= stdafx ;
+  DefaultSNCOptimization ?= yes ;
+  UseLtoJobs    ?= 0 ;
+  TencentEnabled ?= no ;
+  CheckOnly     ?= no ;
+  ForcePdb      ?= no ;
+  DefOpenSSLVer = 1.1 ;
+  OpenSSLVer    ?= $(DefOpenSSLVer) ;
+  UseZlibVer    ?= ng ;
+  OpenXrVer     ?= 1.0.16 ;
+  BundleVersion ?= 1.0.0 ;
+
+  if $(Config) = dbg {
+    CheckedContainers ?= yes ;
+    StackProtection ?= yes ;
+  } else if $(Config) = rel {
+    CheckedContainers = no ;
+    StackProtection ?= no ;
+  } else {
+    CheckedContainers ?= no ;
+    StackProtection ?= no ;
+  }
+  if $(Sanitize) = address {
+    StackProtection = no ;
+  }
+
+  if $(Platform) in macosx { SSEVersion = ; } # use only default SSEVersion for these platforms
+  if $(Platform) in macosx win64 {
+    SSEVersion ?= 4 ;
+  }
+  SSEVersion ?= 2 ;
+  VCMathOption ?= -fp:fast ;
+
+  if ! $(Platform) in win32 win64 {
+    UsePCH = ;
+  }
+  
+  if $(FullOOPEnabled) = yes {
+    Exceptions ?= yes ;
+    CatchSEH ?= yes ;
+    Rtti ?= yes ;
+  } else if $(Config) in dbg dev {
+    Exceptions ?= yes ;
+    CatchSEH ?= yes ;
+    Rtti ?= no ;
+  } else {
+    Exceptions ?= no ;
+    CatchSEH ?= no ;
+    Rtti ?= no ;
+  }
+  
+  UseWholeOpt ?= no ;
+
+  if $(Config) = dbg {
+    FastLink ?= yes ; # this speed-up linking but pdb become dependand on obj output
+  }
+
+  if $(Platform) = win32 || $(Platform) = macosx {
+    if $(QtVer) = def { QtVer = $(DefQtVer) ; }
+    if $(QtVer) { QtVerStatic ?= no ; }
+  } else {
+    QtVer = ;
+    QtVerStatic = ;
+  }
+
+  switch $(Platform) {
+    case win32 :   PhysXSdk ?= 2.8.4 ;
+    case win64 :   PhysXSdk ?= 2.8.4 ;
+    case * :       PhysXSdk ?= none ;
+  }
+
+  if $(OS) = MACOSX {
+    if ! $(_DEVTOOL) && [ GLOB /devtools : * ] { _DEVTOOL = /devtools ; }
+    _DEVTOOL ?= /var/devtools ;
+    XcodeVER ?= Xcode ;
+
+    if ! [ GLOB $(_DEVTOOL)/mac : * ] || mkdevtools in $(JAMTARGETS) {
+      if ! mkdevtools in $(JAMTARGETS) { echo NOTICE\: \"$(_DEVTOOL)/mac/\" not found, trying to construct it ; }
+
+      if [ GLOB /Applications/$(XcodeVER).app/Contents/Developer/usr/bin : * ] {
+        echo Found Xcode at /Applications/$(XcodeVER).app/Contents/Developer ;
+        GLOBAL_BuildDevtool = build_devtool_macosx_xcode ;
+      } else {
+        exit FATAL\: Failed to find Xcode path ;
+      }
+    }
+
+    include $(Root)/prog/_jBuild/macosx/setup-ver.jam ;
+  }
+  if $(OS) = LINUX {
+    GDEVTOOL ?= $(HOME)/devtools ;
+  }
+
+  if ! $(_DEVTOOL) && ! $(GDEVTOOL) { 
+    EXIT 'GDEVTOOL' (or '_DEVTOOL') env-variable must be defined (in UPPERCASE!), aborting ; 
+  }
+  _DEVTOOL ?= $(GDEVTOOL) ;
+  # construct _DEVTOOL_RE compatible with regexp syntax
+  local split = [ MATCH "([^\\\/]*)([\\\/])(.*)" : $(_DEVTOOL) ] ;
+  _DEVTOOL_RE = $(split[1]) ;
+  local _devtool_s = $(_DEVTOOL_RE) ;
+
+  while $(split[2])
+  {
+    local next_split = [ MATCH "([^\\\/]*)([\\\/])(.*)" : $(split[3]) ] ;
+    if $(next_split[2])
+    {
+      _DEVTOOL_RE = $(_DEVTOOL_RE)[\\\\\\\/]$(next_split[1]) ;
+      _devtool_s = $(_devtool_s)/$(next_split[1]) ;
+      split = $(next_split) ;
+    }
+    else
+    {
+      _DEVTOOL_RE = $(_DEVTOOL_RE)[\\\\\\\/]$(split[3]) ;
+      _devtool_s = $(_devtool_s)/$(split[3]) ;
+      break ;
+    }
+  }
+  _DEVTOOL_RE ?= $(_DEVTOOL) ;
+  _DEVTOOL = $(_devtool_s) ;
+  if $(GDEVTOOL) { GDEVTOOL = $(_devtool_s) ; }
+
+  PhysXSdkPath = $(_DEVTOOL)/PhysX.SDK.$(PhysXSdk) ;
+  _DXSDK_DIR   = $(_DEVTOOL)/dx9.sdk ;
+
+  OpenXrSdkPath = $(_DEVTOOL)/openxr-$(OpenXrVer) ;
+  if $(VRDeviceSupport) = yes && ! [ GLOB $(OpenXrSdkPath) : * ] {
+    exit OpenXr SDK not found in $(OpenXrSdkPath), please update devtools ;
+  }
+
+  if $(GOUT_ROOT) {
+    local slashes = [ MATCH "(.*[\\])" : $(GOUT_ROOT) ] ;
+    if $(slashes) { exit GOUT_ROOT\=$(GOUT_ROOT) must not contain '\\' slashes! ; }
+    _OutputRoot = $(GOUT_ROOT) ;
+  } else {
+    _OutputRoot = $(Root)/_output ;
+  }
+
+  # mangle target name (based on Config and Platform);
+  #   params: ( target )
+  rule MangleTargetName
+  {
+    # list of target types that will use mangling target name
+    local _MangledTargetTypes =
+      exe
+      dll
+    ;
+
+    local target = $(1:B)$(1:S) ;
+
+    if ! $(TargetType) in $(_MangledTargetTypes) {
+      return $(target) ;
+    }
+
+    if $(Sanitize) != disabled {
+      local address = asan ;
+      local thread = tsan ;
+      local leak = lsan ;
+      local undefined = ubsan ;
+      target = $(target:B)-$($(Sanitize))$(target:S) ;
+    }
+
+    if $(Config) != rel {
+      target = $(target:B)-$(Config)$(target:S) ;
+    }
+
+    return $(target) ;
+  }
+  rule AutoCompleteTargetName
+  {
+    local type = $(2) ;
+    type ?= $(TargetType) ;
+    if $(1:S) { return $(1) ; }
+    if $(type) = exe {
+      if $(Platform) in win32 win64 { return $(1).exe ; }
+    } else if $(type) = dll {
+      if $(Platform) in win32 win64 { return $(1).dll ; }
+      if $(Platform) in macosx { return $(1).dylib ; }
+      if $(Platform) in linux64 { if $(1:D) { return $(1:D)/lib$(1:D=:S=.so) ; } else { return lib$(1:D=:S=.so) ; } }
+    }
+    return $(1) ;
+  }
+  rule MakeEffectiveTarget
+  {
+    local type = $(2) ;
+    type ?= $(TargetType) ;
+    if ! $(type) in exe dll { return $(1) ; }
+    return [ AutoCompleteTargetName [ MangleTargetName $(1) ] : $(type) ] ;
+  }
+
+  rule SetupOutputDir
+  {
+    local out ;
+
+    if $(PlatformSpec) in vc14 vc14u vc15 vc16 && $(VCUpdateVer) {
+      PlatformOutputDir ?= $(PlatformSpec)-$(VCUpdateVer) ;
+    } else if $(PlatformSpec) = clang && $(Platform) in win32 win64 {
+      PlatformOutputDir ?= $(PlatformSpec)~$(CLangVer) ;
+    }
+
+    PlatformOutputDir ?= $(PlatformSpec) ;
+
+    if $(Platform) = macosx {
+      out = $(Platform)~$(MacOSXVer)~m$(MacOSXMinVer) ;
+      if $(MacOSXArch) = arm64 {
+        local ver = [ MATCH "([^\.]+)\.(.+)" : $(MacOSXMinVer) ] ;
+        if ! $(ver[0]) || ! $(ver[0]) in 11 12 { Exit MacOSXArch=$(MacOSXArch) requires MacOSXMinVer 11+ ($(MacOSXMinVer) is not allowed) ; }
+      }
+      if $(MacOSXArch) != x86_64 { out = $(out)~$(MacOSXArch) ; }
+      out = $(out)~$(PlatformOutputDir)~$(Config) ;
+    } else if $(Platform) in win32 win64 {
+      local ver = [ MATCH "([^\.]+)\.([^\.]+)\.(.*)" : $(WinSdkVer) ] ;
+      if ! $(ver[3] { ver = [ MATCH "([^\.]+)\.(.*)" : $(WinSdkVer) ] ; }
+      if ( ! $(ver[2]) ) || ( ! $(ver[1]) in win win32 ) { Exit bad WinSdkVer\=$(WinSdkVer) ; }
+      if $(ver[2]) = sdk && $(ver[3]) { ver = $(ver[3]) ; } else { ver = $(ver[2-]:J) ; }
+      out = $(Platform)~$(ver)~$(PlatformOutputDir)~$(Config) ;
+    } else {
+      out = $(Platform)~$(PlatformOutputDir)~$(Config) ;
+    }
+
+    if $(CPPStd) != $(DefaultCPPStd) {
+      out = $(out)~cpp$(CPPStd) ;
+    }
+
+    if $(Platform) in win32 win64 linux64 macosx && $(UseD3DMulti) = yes {
+      if ! -D_TARGET_D3D_MULTI in $(GlobalCPPopt) { GlobalCPPopt += -D_TARGET_D3D_MULTI ; }
+      out = $(out)~m ;
+    } else if $(Platform) in macosx {
+      out = $(out)~MTL ;
+    }
+
+    if $(MSVectorcall) = yes && $(Platform) in win32 win64 {
+      out = $(out)~v ;
+    }
+
+    if $(QtVer) { if $(QtVerStatic) = yes { out = $(out)~qt$(QtVer)s ; } else { out = $(out)~qt$(QtVer) ; } }
+
+    if $(DriverLinkage) = dynamic {
+      out = $(out)~krnlimp ;
+      if $(CoreLinkage) = dynamic { out = $(out)~coreimp ; }
+    }
+
+    if $(Platform) in win32 win64 macosx linux64 {
+      out = $(out)~s$(SSEVersion) ;
+    }
+    if $(Platform) in win32 win64 {
+      switch $(VCMathOption) {
+        case -fp:fast : # default choice and output name
+        case -fp:precise : out = $(out)~fp ;
+        case -fp:strict :  out = $(out)~fs ;
+        case * : Exit Unsupported VCMathOption\=$(VCMathOption) ;
+      }
+    }
+    if $(StarForce) = yes {
+      out = $(out)~sf ;
+    }
+    if $(ForceLogs) = yes {
+      if ! -DDAGOR_FORCE_LOGS=1 in $(GlobalCPPopt) { GlobalCPPopt += -DDAGOR_FORCE_LOGS=1 ; }
+      out = $(out)~log ;
+    }
+    if $(Demo) = yes {
+      out = $(out)~demo ;
+    }
+    if $(Exceptions) != no {
+      out = $(out)~ex ;
+      if $(CatchSEH) != yes {
+        out = $(out)ns ;
+      }
+    }
+    if $(Rtti) != no {
+      out = $(out)~rtti ;
+    }
+    if $(Sanitize) != disabled {
+      out = $(out)~san~$(Sanitize) ;
+    }
+    if $(CxxStdLib) = libc++ {
+      out = $(out)~libcxx ;
+    }
+    if $(OutputSuffix) {
+      out = $(out)~$(OutputSuffix) ;
+    }
+    if $(UseLtoJobs) != 0 {
+      out = $(out)~lto ;
+    }
+    if $(CheckedContainers) = yes {
+      local defines = -D_DEBUG_TAB_ ;
+      for d in $(defines) { if ! $(d) in $(GlobalCPPopt) { GlobalCPPopt += $(d) ; } }
+      out = $(out)~c ;
+    }
+    if $(StackProtection) = no && $(Sanitize) != address {
+      out = $(out)~nosp ;
+    }
+    if $(CheckOnly) = yes {
+      out = $(out)~co ;
+    }
+
+    if $(NoMemBaseInclude) = yes {
+      if ! -D__B_NO_MEM_BASE_INCLUDE in $(GlobalCPPopt) { GlobalCPPopt += -D__B_NO_MEM_BASE_INCLUDE ; }
+      out = $(out)~nmb ;
+    }
+
+    if $(UseWholeOpt) != no && $(Platform) in win32 win64 {
+      out = $(out)~who ;
+    }
+
+    if $(UseSystemOpenSSL) = yes {
+      out = $(out)~sslsys ;
+    } else if $(OpenSSLVer) != $(DefOpenSSLVer) {
+      out = $(out)~ssl$(OpenSSLVer) ;
+    }
+
+    if $(BulletSdkVer) != $(DefBulletSdkVer) {
+      out = $(out)~bt$(BulletSdkVer) ;
+    }
+
+    _Output   = $(_OutputRoot)/$(out) ;
+    _PrintedOutput   = [$(out)] ;
+  }
+
+  SetupOutputDir ;
+
+  if ( clean in $(JAMTARGETS) ) || ( this in $(JAMTARGETS) ) { GLOBAL_OmitDependencies = 1 ; }
+  if nocare in $(JAMTARGETS) { GLOBAL_IncludesNoCare = 1 ; }
+  if depjam in $(JAMTARGETS) { GLOBAL_DependOnJam = 1 ; }
+  if cache in $(JAMTARGETS) { GLOBAL_CacheDryRun = 1 ; }
+  if clean in $(JAMTARGETS) { GLOBAL_CleanObj = clean ; }
+  else if clean_all in $(JAMTARGETS) { GLOBAL_CleanObj = clean_all ; }
+
+  CODE_CHECK ?= rem if not errorlevel 1 call $(Root)/prog/_jBuild/_codeCheck/cc-dev.exe -d -r$(Root) ;
+
+
+  # prepare command line to call another jam (used in some rules)
+  if $(OS) = NT {
+    if ! $(ComSpec) { Exit Neither ComSpec, nor COMSPEC env var found ; }
+    JAM_EXE = $(ComSpec) /C jam.exe ;
+  } else if $(OS) in MACOSX LINUX {
+    JAM_EXE = jam ;
+  }
+
+  # general-purpose python-based file stringifier
+  if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
+  else if $(OS) in MACOSX { PYTHON_EXE = python ; }
+  else if $(OS) in LINUX { PYTHON_EXE = python ; }
+
+  NotFile ALL_CODEGEN_TARGET ;
+}

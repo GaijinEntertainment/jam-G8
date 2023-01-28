@@ -182,7 +182,7 @@ var_string(
 
 		while( l )
 		{
-		    int so = strlen( l->string );
+		    int so = (int)strlen( l->string );
 
 		    if( out + so >= oute )
 			return -1;

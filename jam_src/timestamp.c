@@ -19,6 +19,10 @@
 # include "timestamp.h"
 # include "newstr.h"
 
+#ifdef JAM2VS
+#	include <jam2vs.h>
+#endif //JAM2VS
+
 /*
  * BINDING - all known files
  */
@@ -67,6 +71,10 @@ timestamp(
 	PATHNAME f1, f2;
 	BINDING	binding, *b = &binding;
 	char buf[ MAXJPATH ];
+
+#ifdef JAM2VS
+  add_include(target);
+#endif //JAM2VS
 
 # ifdef DOWNSHIFT_PATHS
 	char path[ MAXJPATH ];

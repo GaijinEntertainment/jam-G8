@@ -63,6 +63,10 @@
 # include "headers.h"
 # include "command.h"
 
+#ifdef JAM2VS
+#	include <jam2vs.h>
+#endif //JAM2VS
+
 # ifndef max
 # define max( a,b ) ((a)>(b)?(a):(b))
 # endif
@@ -105,11 +109,15 @@ static const char *target_bind[] =
 	"exists",
 } ;
 
-# define spaces(x) ( "                " + 16 - ( x > 16 ? 16 : x ) )
+# define spaces(x) ( &"                "[16 - ( x > 16 ? 16 : x )] )
 
 /*
  * make() - make a target, given its name
  */
+
+#ifdef __GNUC__
+  #define clock() time(NULL)*CLOCKS_PER_SEC
+#endif
 
 int
 make( 
@@ -120,6 +128,7 @@ make(
 	int i;
 	COUNTS counts[1];
 	int status = 0;		/* 1 if anything fails */
+	clock_t t0 = clock(), t1, t2;
 
 	memset( (char *)counts, 0, sizeof( *counts ) );
 
@@ -129,6 +138,7 @@ make(
 
 	    make0( t, 0, 0, counts, anyhow );
 	}
+	t1 = clock();
 
 	if( DEBUG_MAKE )
 	{
@@ -149,8 +159,16 @@ make(
 	for( i = 0; i < n_targets; i++ )
 	    status |= make1( bindtarget( targets[i] ) );
 
+	t2 = clock();
+	if (t2-t0 > CLOCKS_PER_SEC/10)
+	  printf("\nbuild time: %.1f sec (graph), %.1f sec (actions), using %d job(s)\n",
+	    ((double)(t1-t0))/CLOCKS_PER_SEC, ((double)(t2-t1))/CLOCKS_PER_SEC, globs.jobs);
 	return status;
 }
+
+#ifndef _WIN32
+  #undef clock
+#endif
 
 /*
  * make0() - bind and scan everything to make a TARGET
@@ -167,7 +185,7 @@ make0(
 	COUNTS	*counts,	/* for reporting */
 	int	anyhow )	/* forcibly touch all (real) targets */
 {
-	TARGETS	*c, *d, *incs;
+	TARGETS	*c, *incs;
 	TARGET 	*ptime = t;
 	time_t	last, leaf, hlast;
 	int	fate;
@@ -229,6 +247,10 @@ make0(
 	/* 
 	 * Pause for a little progress reporting 
 	 */
+
+#ifdef JAM2VS
+  add_include(t->name);
+#endif //JAM2VS
 
 	if( DEBUG_MAKEPROG )
 	{

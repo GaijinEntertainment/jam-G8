@@ -32,6 +32,9 @@ TARGET = -o $(EXENAME)
 #TARGET = /Fejam0
 #EXENAME = .\jam0.exe
 
+# LINUX (and linux-like)
+#LINKLIBS += -lpthread
+
 # Interix - gcc
 #CC = gcc
 
@@ -52,7 +55,7 @@ TARGET = -o $(EXENAME)
 
 SOURCES = \
 	builtins.c \
-	command.c compile.c execunix.c execvms.c expand.c \
+	command.c compile.c execdmc.c outFilter.c execvms.c expand.c \
 	filent.c fileos2.c fileunix.c filevms.c glob.c hash.c \
 	headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c \
 	newstr.c option.c parse.c pathunix.c pathvms.c regexp.c \

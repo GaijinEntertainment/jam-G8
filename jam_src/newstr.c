@@ -51,7 +51,7 @@ newstr( const char *string )
 
 	if( hashenter( strhash, (HASHDATA **)&s ) )
 	{
-	    int l = strlen( string );
+	    int l = (int)strlen( string );
 	    char *m = (char *)malloc( l + 1 );
 
 	    if (DEBUG_MEM)

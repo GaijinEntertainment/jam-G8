@@ -38,6 +38,8 @@
 
 # ifdef USE_PATHUNIX
 
+#define SET_PATH_DELIM '/'
+
 /*
  * path_parse() - split a file name into dir/base/suffix/member
  */
@@ -168,7 +170,7 @@ path_build(
 	{
 	    memcpy( file, f->f_root.ptr, f->f_root.len );
 	    file += f->f_root.len;
-	    *file++ = PATH_DELIM;
+	    *file++ = SET_PATH_DELIM;
 	}
 
 	if( f->f_dir.len )
@@ -186,10 +188,11 @@ path_build(
 	    /* NT:   Special case for dir / : don't add another / */
 
 # if PATH_DELIM == '\\'
-	    if( !( f->f_dir.len == 3 && f->f_dir.ptr[1] == ':' ) )
+	    if( !( f->f_dir.len == 3 && f->f_dir.ptr[1] == ':' ) && 
+    	    !( f->f_dir.len == 1 && f->f_dir.ptr[0] == '/' ))
 # endif
 		if( !( f->f_dir.len == 1 && f->f_dir.ptr[0] == PATH_DELIM ) )
-		    *file++ = PATH_DELIM;
+		    *file++ = SET_PATH_DELIM;
 	}
 
 	if( f->f_base.len )

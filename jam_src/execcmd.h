@@ -10,6 +10,9 @@
  * 05/04/94 (seiwald) - async multiprocess interface
  */
 
+void exec_prepare();
+void exec_finish();
+
 void execcmd(
 	char *string,
 	void (*func)( void *closure, int status ),

@@ -35,7 +35,7 @@
 
 # ifdef OS_MAC
 
-#include <Files.h>
+#include <files.h>
 #include <Folders.h>
 
 # include <:sys:stat.h>

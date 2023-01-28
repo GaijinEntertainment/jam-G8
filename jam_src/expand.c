@@ -81,7 +81,7 @@ var_expand(
 	int depth;
 
 	if( DEBUG_VAREXP )
-	    printf( "expand '%.*s'\n", end - in, in );
+	    printf( "expand '%.*s'\n", (int)(end - in), in );
 
 	/* This gets alot of cases: $(<) and $(>) */
 
@@ -458,7 +458,7 @@ var_edit_parse(
 	    else
 	    {
 		fp->ptr = ++mods;
-		fp->len = strlen( mods );
+		fp->len = (int)strlen( mods );
 		mods += fp->len;
 	    }
 	}

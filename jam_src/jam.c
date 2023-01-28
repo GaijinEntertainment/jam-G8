@@ -117,6 +117,11 @@
 # include "scan.h"
 # include "timestamp.h"
 # include "make.h"
+# include "execcmd.h"
+
+#ifdef JAM2VS
+#	include <jam2vs.h>
+#endif //JAM2VS
 
 /* Macintosh is "special" */
 
@@ -128,6 +133,10 @@
 
 # ifdef unix
 # include <sys/utsname.h>
+# include <unistd.h>
+# define _getcwd getcwd
+# elif !defined(__DMC__)
+# include <direct.h>
 # endif
 
 struct globs globs = {
@@ -166,7 +175,9 @@ extern char **environ;
 # endif
 # endif
 
-main( int argc, char **argv, char **arg_environ )
+#define JAMBUILDSTR "1.1-2023/01/28"
+
+int main(int argc, char **argv, char **arg_environ)
 {
 	int		n;
 	const char	*s;
@@ -181,6 +192,35 @@ main( int argc, char **argv, char **arg_environ )
 
 	argc--, argv++;
 
+#ifdef JAM2VS
+  globs.jobs = 1;
+  if ((n = getoptions(argc, argv, "d:j:f:gs:t:ano:lL:oO:qvx:c:", optv)) < 0)
+  {
+    printf( "\nusage: jam [ options ] targets...\n\n" );
+    printf( "-dx     Display (a)actions (c)causes (d)dependencies\n" );
+		printf( "        (m)make tree (x)commands (0-9) debug levels.\n" );
+    printf( "-fx     Read x instead of Jambase.\n" );
+    printf( "-ox     Write project to file x.\n" );
+    printf( "-Ox     Write project to file x with filters.\n");
+    printf( "-lx     Write project to file x.vcproj and library project to file xLib.vcproj.\n" );
+    printf( "-Lx     Write project to file x.vcproj with filters and library project to file xLib.vcproj.\n");
+    printf( "-sx=y   Set variable x=y, overriding environment.\n" );
+    printf( "-v      Print the version of jam and exit.\n" );
+    printf( "-x      Exclude files.\n" );
+    printf( "-cx     Set config x for OutputDependsLibrariesx.\n\n" );
+    exit( EXITBAD );
+  }
+#else
+#ifndef unix
+  putenv("VS_UNICODE_OUTPUT="); // reset this var to prevent VS from capturing cl.exe output
+
+  globs.jobs = atoi(getenv("NUMBER_OF_PROCESSORS"))+1;
+  if (globs.jobs < 2)
+    globs.jobs = 2;
+#else
+  globs.jobs = sysconf(_SC_NPROCESSORS_ONLN)+1;
+#endif
+
 	if( ( n = getoptions( argc, argv, "d:j:f:gs:t:ano:qv", optv ) ) < 0 )
 	{
 	    printf( "\nusage: jam [ options ] targets...\n\n" );
@@ -190,7 +230,7 @@ main( int argc, char **argv, char **arg_environ )
 	    printf( "        (m)make tree (x)commands (0-9) debug levels.\n" );
             printf( "-fx     Read x instead of Jambase.\n" );
 	    printf( "-g      Build from newest sources first.\n" );
-            printf( "-jx     Run up to x shell commands concurrently.\n" );
+            printf( "-jx     Run up to x shell commands concurrently (default=%d).\n", globs.jobs);
             printf( "-n      Don't actually execute the updating actions.\n" );
             printf( "-ox     Write the updating actions to file x.\n" );
             printf( "-q      Quit quickly as soon as a target fails.\n" );
@@ -200,6 +240,7 @@ main( int argc, char **argv, char **arg_environ )
 
 	    exit( EXITBAD );
 	}
+#endif //JAM2VS
 
 	argc -= n, argv += n;
 
@@ -207,21 +248,27 @@ main( int argc, char **argv, char **arg_environ )
 
 	if( ( s = getoptval( optv, 'v', 0 ) ) )
 	{
-	    printf( "Jam %s. %s. ", VERSION, OSMINOR );
-	    printf( "Copyright 1993-2002 Christopher Seiwald.\n" );
+	    printf( "Jam %s. %s. [Build %s] ", VERSION, OSMINOR, JAMBUILDSTR );
+	    printf( "Copyright 1993-2002 Christopher Seiwald [Modified by Gaijin Games KFT, 2004-2023]\n" );
 
 	    return EXITOK;
 	}
 
 	/* Pick up interesting options */
 
+#ifdef JAM2VS
+	globs.noexec++;
+#else
 	if( ( s = getoptval( optv, 'n', 0 ) ) )
 	    globs.noexec++, DEBUG_MAKE = DEBUG_MAKEQ = DEBUG_EXEC = 1; 
+#endif //JAM2VS
 
 	if( ( s = getoptval( optv, 'q', 0 ) ) )
 	    globs.quitquick = 1;
 
+#ifndef JAM2VS
 	if( ( s = getoptval( optv, 'a', 0 ) ) )
+#endif //JAM2VS
 	    anyhow++;
 
 	if( ( s = getoptval( optv, 'j', 0 ) ) )
@@ -313,6 +360,19 @@ main( int argc, char **argv, char **arg_environ )
 
 	var_defines( (const char **)use_environ );
 
+  {
+		static char cwd[1024];
+		LIST *l = L0;
+		char *p;
+		memset(cwd, 0, sizeof(cwd));
+		_getcwd(cwd, sizeof(cwd)-1);
+		for (p = cwd; *p; p++)
+		  if (*p == '\\')
+  		  *p = '/';
+  	if (cwd[0])
+     	var_set("JAM_CWD", l = list_new( l, cwd, 0 ), VAR_SET);
+  }
+
 	/* Load up variables set on command line. */
 
 	for( n = 0; s = getoptval( optv, 's', n ); n++ )
@@ -323,6 +383,22 @@ main( int argc, char **argv, char **arg_environ )
 	    var_defines( symv );
 	}
 
+	if( !argc )
+	{
+	    const char *symv[2];
+	    symv[0] = "JAMTARGETS=all";
+	    symv[1] = 0;
+	    var_defines(symv);
+	}
+	else
+	{
+  		LIST *l = L0;
+  		int i;
+  		for (i = 0; i < argc; i ++)
+  	    l = list_new( l, argv[i], 0 );
+  		var_set("JAMTARGETS", l, VAR_SET);
+  }
+
 	/* Initialize built-in rules */
 
 	load_builtins();
@@ -330,10 +406,18 @@ main( int argc, char **argv, char **arg_environ )
 	/* Parse ruleset */
 
 	for( n = 0; s = getoptval( optv, 'f', n ); n++ )
+	{
+  		LIST *l = L0;
+  		var_set("JAMFILESRC", l = list_new( l, s, 0 ), VAR_APPEND);
 	    parse_file( s );
+  }
 
 	if( !n )
+	{
+  		LIST *l = L0;
+  		var_set("JAMFILESRC", l = list_new( l, "jamfile", 0 ), VAR_SET);
 	    parse_file( "+" );
+  }
 
 	status = yyanyerrors();
 
@@ -344,6 +428,36 @@ main( int argc, char **argv, char **arg_environ )
 
 	/* If an output file is specified, set globs.cmdout to that */
 
+#ifdef JAM2VS
+  if( s = getoptval( optv, 'o', 0 ) )
+	{
+		begin(s, 0);
+	}
+  else if (s = getoptval(optv, 'O', 0))
+  {
+    begin_with_filters(s, 0);
+  }
+	else if( s = getoptval( optv, 'l', 0 ) )
+	{
+		begin(s, 1);
+	}
+  else if (s = getoptval(optv, 'L', 0))
+  {
+    begin_with_filters(s, 1);
+  }
+	else
+	{
+		printf( "Neither -o<Project.vcproj> nor -l<Project.vcproj> specified\n" );
+		exit( EXITBAD );
+	}
+
+	for( n = 0; s = getoptval( optv, 'x', n ); n++ )
+		add_exclusion( s );
+  if (s = getoptval(optv, 'c', 0))
+  {
+    set_config(s);
+  }
+#else
 	if( s = getoptval( optv, 'o', 0 ) )
 	{
 	    if( !( globs.cmdout = fopen( s, "w" ) ) )
@@ -353,8 +467,10 @@ main( int argc, char **argv, char **arg_environ )
 	    }
 	    globs.noexec++;
 	}
+#endif //JAM2VS
 
 	/* Now make target */
+	exec_prepare();
 
 	if( !argc )
 	    status |= make( 1, &all, anyhow );
@@ -367,6 +483,11 @@ main( int argc, char **argv, char **arg_environ )
 	donerules();
 	donestamps();
 	donestr();
+	exec_finish();
+
+#ifdef JAM2VS
+    end();
+#endif //JAM2VS
 
 	/* close cmdout */
 

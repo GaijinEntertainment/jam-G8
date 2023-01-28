@@ -192,7 +192,8 @@ list_printq( FILE *out, LIST *l )
 
 	    while( p = (char *)memchr( op, '"',  ep - op ) )
 	    {
-		fwrite( op, p - op, 1, out );
+		if (fwrite( op, p - op, 1, out ) != 1)
+		  break;
 		fputc( '\\', out );
 		fputc( '"', out );
 		op = p + 1;
@@ -200,7 +201,8 @@ list_printq( FILE *out, LIST *l )
 
 	    /* Write remainder */
 
-	    fwrite( op, ep - op, 1, out );
+	    if (fwrite( op, ep - op, 1, out ) != 1)
+	      break;
 	    fputc( '"', out );
 	    fputc( ' ', out );
 	}

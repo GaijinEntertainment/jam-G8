@@ -42,6 +42,10 @@
  * VMS, OPENVMS
  */
 
+# if defined(__unix__) && !defined(unix)
+#  define unix __unix__
+# endif
+
 # ifdef VMS
 
 # define unlink remove
@@ -93,7 +97,7 @@
 # define OSMINOR "OS=NT"
 # define OS_NT
 # define SPLITPATH ';'
-# define MAXLINE 996	/* longest 'together' actions */
+# define MAXLINE (512<<10) /* longest 'together' actions */
 # define USE_EXECUNIX
 # define USE_PATHUNIX
 # define PATH_DELIM '\\'
@@ -230,6 +234,7 @@
 # ifdef __FreeBSD__
 # define OSMINOR "OS=FREEBSD"
 # define OS_FREEBSD
+# define stricmp strcasecmp
 # endif
 # ifdef __DGUX__
 # define OSMINOR "OS=DGUX"
@@ -255,9 +260,10 @@
 # define OS_ISC
 # define NO_VFORK
 # endif
-# ifdef linux
+# ifdef __linux__
 # define OSMINOR "OS=LINUX"
 # define OS_LINUX
+# define stricmp strcasecmp
 # endif
 # ifdef __Lynx__
 # define OSMINOR "OS=LYNX"
@@ -315,6 +321,9 @@
 # define unix
 # define OSMINOR "OS=MACOSX"
 # define OS_MACOSX
+# define unlink remove
+# define stricmp strcasecmp
+# define DOWNSHIFT_PATHS
 # endif
 # ifdef __osf__
 # define OSMINOR "OS=OSF"
@@ -374,6 +383,10 @@
 # include <signal.h>
 # include <string.h>
 # include <time.h>
+
+#ifdef __GNUC__
+  #include <unistd.h>
+#endif
 
 # ifndef OS_QNX
 # include <memory.h>
@@ -441,7 +454,8 @@
 
 # if defined( __ia64__ ) || \
      defined( __IA64__ ) || \
-     defined( _M_IA64 )
+     defined( _M_IA64 ) || \
+     defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX != INT32_MAX
 # define OSPLAT "OSPLAT=IA64"
 # endif
 
@@ -458,7 +472,7 @@
  */
 
 # ifndef MAXLINE
-# define MAXLINE 10240	/* longest 'together' actions' */
+# define MAXLINE (256<<10)	/* longest 'together' actions' */
 # endif
 
 # ifndef EXITOK

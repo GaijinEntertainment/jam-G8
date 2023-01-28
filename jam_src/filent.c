@@ -46,11 +46,19 @@
 # include <io.h>
 # include <sys/stat.h>
 
+#ifdef DOS386
+# include <dos.h>
+# include <direct.h>
+#endif
+
 /*
  * file_dirscan() - scan a directory for files
  */
 
-# ifdef _M_IA64
+# if defined( __ia64__ ) || \
+     defined( __IA64__ ) || \
+     defined( _M_IA64 ) || \
+     defined(_M_AMD64) || defined(_M_X64) || defined(_M_ARM64) || INTPTR_MAX != INT32_MAX
 # define FINDTYPE long long
 # else
 # define FINDTYPE long
@@ -74,7 +82,7 @@ file_dirscan(
 	memset( (char *)&f, '\0', sizeof( f ) );
 
 	f.f_dir.ptr = dir;
-	f.f_dir.len = strlen(dir);
+	f.f_dir.len = (int)strlen(dir);
 
 	dir = *dir ? dir : ".";
 
@@ -110,7 +118,7 @@ file_dirscan(
 
 	    ret = findnext( finfo );
 	}
-# else
+# elif !defined(DOS386)
 	handle = _findfirst( filespec, finfo );
 
 	if( ret = ( handle == (FINDTYPE)(-1) ) )
@@ -119,7 +127,7 @@ file_dirscan(
 	while( !ret )
 	{
 	    f.f_base.ptr = finfo->name;
-	    f.f_base.len = strlen( finfo->name );
+	    f.f_base.len = (int)strlen( finfo->name );
 
 	    path_build( &f, filename, 0 );
 
@@ -129,6 +137,55 @@ file_dirscan(
 	}
 
 	_findclose( handle );
+# else
+  struct time_format { 
+    unsigned two_seconds: 5;
+    unsigned minutes: 6; 
+    unsigned hours: 5;
+  } time;
+  struct date_format { 
+    unsigned day: 5;
+    unsigned month: 4; 
+    unsigned year: 7;
+  } date;
+  struct tm ntime;
+
+  strcat ( filespec, ".*" );
+  struct FIND *block = findfirst ( filespec, _A_SUBDIR );
+  while( block )
+  {
+      if ((block->attribute & _A_SUBDIR) &&
+          (strcmp ( block->name, "." ) == 0 ||
+           strcmp ( block->name, ".." ) == 0 )) {
+        block = findnext();
+        continue;
+      }
+
+      time = *(struct time_format *) &block->time;
+      date = *(struct date_format *) &block->date;
+
+      ntime.tm_sec = time.two_seconds*2;
+      ntime.tm_min = time.minutes;
+      ntime.tm_hour = time.hours;
+      ntime.tm_mday = date.day;
+      ntime.tm_mon = date.month-1;
+      ntime.tm_year = date.year+80;
+      ntime.tm_wday = 0;
+      ntime.tm_yday = 0;
+      ntime.tm_isdst = 0;
+
+      unsigned f_time = mktime ( &ntime );
+      //printf ( "file %16s %s", block->name, asctime(&ntime));
+
+      f.f_base.ptr = block->name;
+      f.f_base.len = strlen( block->name );
+
+      path_build( &f, filename, 0 );
+
+      (*func)( closure, filename, 1 /* stat()'ed */, f_time );
+
+      block = findnext();
+  }
 # endif
 
 }
@@ -263,7 +320,7 @@ file_archscan(
 	    if( c = strrchr( name, '\\' ) )
 		name = c + 1;
 
-	    sprintf( buf, "%s(%.*s)", archive, endname - name, name );
+	    sprintf( buf, "%s(%.*s)", archive, (int)(endname - name), name );
 	    (*func)( closure, buf, 1 /* time valid */, (time_t)lar_date );
 
 	    offset += SARHDR + lar_size;
