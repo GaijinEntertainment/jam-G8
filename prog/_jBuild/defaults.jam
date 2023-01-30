@@ -137,7 +137,8 @@ if ! $(__DEFAULTS_INCLUDED) {
 
   if $(OS) = MACOSX {
     if ! $(_DEVTOOL) && [ GLOB /devtools : * ] { _DEVTOOL = /devtools ; }
-    _DEVTOOL ?= /var/devtools ;
+    if ! $(_DEVTOOL) && [ GLOB /var/devtools : * ] { _DEVTOOL = /var/devtools ; }
+    _DEVTOOL ?= $(HOME)/devtools ;
     XcodeVER ?= Xcode ;
 
     if ! [ GLOB $(_DEVTOOL)/mac : * ] || mkdevtools in $(JAMTARGETS) {
