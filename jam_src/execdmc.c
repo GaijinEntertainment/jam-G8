@@ -497,7 +497,10 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
     params = strtok_r(NULL, "", &brkt);
     resp_start = strstr(params, "@@@");
     if (resp_start)
-      memcpy(resp_start, "   ", 3);
+    {
+      memset(resp_start, ' ', 3);
+      resp_start += 4; // +1 to skip trailing ' '
+    }
     else
       resp_start = params;
 
@@ -522,19 +525,10 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
       temp[0] = '@';
 
 #ifndef unix
-      {
-        int line_len = 0;
-        char *ptr = resp_start;
-        for (; *ptr; ptr++)
-        {
-          line_len ++;
-          if (line_len > 32000 && *ptr == ' ')
-          {
-            *ptr = '\n';
-            line_len = 0;
-          }
-        }
-      }
+      char *ptr = resp_start;
+      for (; *ptr; ptr++)
+        if (*ptr == ' ')
+          *ptr = '\n';
 #endif
 
 #ifdef unix
