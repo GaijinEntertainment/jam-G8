@@ -515,7 +515,7 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
     }
 #endif
 
-    if ( strlen ( cmd ) + strlen ( params ) + 8 < (ctx->useRespFile ? 1024 : MAX_CMDLINE_LEN) ) {
+    if ( strlen ( cmd ) + strlen ( params ) + 8 < ((ctx->useRespFile==1) ? 2048 : MAX_CMDLINE_LEN) ) {
       // direct exec
       ctx->status = SPAWN(cmd, params, filtered ? &ctx->exec_out_filter : NULL, use1core);
     }
