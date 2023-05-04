@@ -351,6 +351,8 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
   } else if ( stricmp ( cmd, "rem" ) == 0 || cmd[0] == '#' ) {
     if (stricmp(cmd, "#respfile") == 0)
       ctx->useRespFile = 1;
+    else if (stricmp(cmd, "#respfile-ln") == 0)
+      ctx->useRespFile = 2;
     else if (stricmp(cmd, "#no-respfile") == 0)
       ctx->useRespFile = 0;
     // remark, do nothing
@@ -497,7 +499,10 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
     params = strtok_r(NULL, "", &brkt);
     resp_start = strstr(params, "@@@");
     if (resp_start)
+    {
       memcpy(resp_start, "   ", 3);
+      resp_start += 4; // +1 to skip trailing ' '
+    }
     else
       resp_start = params;
 
@@ -523,7 +528,7 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
 
 #ifndef unix
       {
-        int line_len = 0;
+        int line_len = (ctx->useRespFile == 2) ? 32768 : 0;
         char *ptr = resp_start;
         for (; *ptr; ptr++)
         {
@@ -531,7 +536,8 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
           if (line_len > 32000 && *ptr == ' ')
           {
             *ptr = '\n';
-            line_len = 0;
+            if (ctx->useRespFile != 2)
+              line_len = 0;
           }
         }
       }
