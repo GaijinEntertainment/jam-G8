@@ -115,10 +115,6 @@ rule CheckParams
     }
 
     Target = [ AutoCompleteTargetName $(Target) ] ;
-
-    if ! $(Platform) in win32 win64 {
-      UsePCH = ;
-    }
   }
 }
 
@@ -481,7 +477,7 @@ rule ProcessTargetVariables
       }
     }
 
-    if $(BundleCopy) || $(BundlePng) || $(BundleLang) || $(BundlePlist) || $(BundleXib) {
+    if $(BundleCopy) || $(BundlePng) || $(BundleLang) || $(BundleCustomLang) || $(BundlePlist) || $(BundleXib) {
       SignPackageRule ;
     }
 
@@ -509,14 +505,22 @@ rule ProcessTargetVariables
       ProcessBundleXib $(BundleXib) ;
       BundleXib = ;
     }
+
+    if $(BundleCustomLang) {
+      ProcessBundleCustomLang $(BundleCustomLang) ;
+      BundleCustomLang = ;
+      BundleLang = ;
+    }
+
     if $(BundleLang) {
       ProcessBundleLang $(BundleLang) ;
       BundleLang = ;
     }
 
     if $(BundlePlist) {
-      ProcessBundlePlist $(BundlePlist) : $(CopyTo) ;
+      ProcessBundlePlist $(BundlePlist) : $(CopyTo) : $(AddBundlePlist) ;
       BundlePlist = ;
+      AddBundlePlist = ;
     }
 
     $(Target)__RC_OPT = $(RCopt) ;
@@ -533,6 +537,8 @@ rule ProcessTargetVariables
     $(Target)__CopyTo += $(CopyTo) ;
     CopyTo = ;
   }
+  else { UseQuirrel = ; }
+
 
   $(Target)__TargetType = $(TargetType) ;
   TargetType = ;
@@ -546,12 +552,13 @@ rule ProcessTargetVariables
   $(Target)__OutDir = $(OutDir) ;
   OutDir = ;
 
-  $(Target)__UsePCH = $(UsePCH) ;
+  if $(UsePCH) = yes && $(DisableUsingPCH) != yes {
+    $(Target)__UsePCH = $(UsePCH) ;
+    $(Target)__PrecompiledName  = $(PrecompiledName) ;
+    $(Target)__PrecompiledName ?= stdafx ;
+    echo \ .\ using PCH='$($(Target)__PrecompiledName)' for $(Target) ;
+  }
   UsePCH = ;
-
-  $(PrecompiledName) ?= stdafx ;
-
-  $(Target)__PrecompiledName = $(PrecompiledName) ;
   PrecompiledName = ;
 
   if $($(Target)__TargetType) != util && $(GLOBAL_OmitDependencies) = 1
@@ -1155,7 +1162,10 @@ rule CompileJamVarCpp
   }
 
     local ref_var = ;
-    for s in $($(2)) { ref_var += [ BuildValidJamString $(s) ] ; }
+    for s in $($(2)) {
+      if [ MATCH ^(<|>)+$ : $(s) ] { Echo Skip bad ref $(s) for $(1) ; s = -conflict- ; }
+      ref_var += [ BuildValidJamString $(s) ] ;
+    }
 
     var_name on $(dest_cpp) = $(2)_cmp_value ;
     var on $(dest_cpp) = $($(2)) ;
@@ -1296,7 +1306,7 @@ rule AotCompileBatchedGeneratedDAS
     }
   }
   if $(obj_list) {
-    local jamvar = [ StrToCIdent $(target:B)_DAS_pull_AOT ] ;
+    local jamvar = [ Make_DAS_pull_AOT $(target) ] ;
     local obj_path = $(jamvar)$(_OBJ_SUFFIX) ;
 
     list = ;
@@ -1436,7 +1446,7 @@ rule ProcessLicense  # lic_dir : dest_list_var : dest_err_var
   #echo ProcessLicense $(1) ;
   local lic = [ GLOB $(1) : License.* license.* LICENSE.* LICENSE_*.txt license LICENSE COPYING copying COPYING.* COPYRIGHT copyright ] ;
   if ! $(lic) && [ MATCH \/(3rd|1st)PartyLibs\/ : $(1) ] {
-    if ! [ GLOB $(1) : NO_LICENSE ] {
+    if ! [ GLOB $(1) : NO_LICENSE ] && [ GLOB $(1) : * ] {
       echo ERROR: missing license for $(1) ;
       $(3) = yes ;
     }
@@ -1749,6 +1759,202 @@ rule GatherUsedLibs
   for t_jamfile in $($(1)__Dependencies) { if $($(t_jamfile)_Target:S) != ".dll" { GatherUsedLibs $($(t_jamfile)_Target) : $(2) ; } }
 }
 
+rule MarkSourcesChanged # sources : tmp_dir : recompile_list_varname : suffixes
+{
+  for src in $(1) {
+    if ! $(src:S) in $(4) { continue ; }
+    local obj_path = $(2)/$(src:S=$(_OBJ_SUFFIX)) ;
+    ALWAYS $(obj_path) ;
+    if ! $(src) in $($(3)) { $(3) += $(src) ; }
+  }
+}
+rule SplitStringsOnSpace # list
+{
+  local ret = ;
+  for s in $(1) {
+    local split = [ MATCH ([^\ ])+\ +(.*) : $(s) ] ;
+    if $(split) { ret += $(split[1]) $(split[2]) ; } else { ret += $(s) ; }
+  }
+  return $(ret) ;
+}
+rule ReplaceRootPrefixForKnownOptionAndStripHarmless # option
+{
+  local ret = ;
+  for s in [ SplitStringsOnSpace $(1) ] {
+    if $(s) in /WX -WX -Werror { continue ; }
+
+    local split = [ MATCH ^(-I|-FI|-Fd|-Fp|-L|-map:|-implib:|-lldmap:|-def:|-Wl,-Map,|-Wl,|--Map\=|--Map\ |/I|/FI|/Fp|/Fd|/def:|)$(Root)(/.*) : $(s) ] ;
+    if $(split) { ret += $(split[1])*$(split[2]) ; } else { ret += $(s) ; }
+  }
+  return $(ret) ;
+}
+rule ReplaceRootPrefix # file
+{
+  local ret = ;
+  for s in $(1) {
+    local split = [ MATCH ^$(Root)(/.*) : $(s) ] ;
+    if $(split) { ret += *$(split[1]) ; } else { ret += $(s) ; }
+  }
+  return $(ret) ;
+}
+rule AddEscapesToMakeJamValidForWrite # list
+{
+  local spec_sym = "\"\\" ;
+  local ret = ;
+  for s in $(1) {
+    local match_str = ([^$(spec_sym)]*)([$(spec_sym)])(.*) ;
+    local split = [ MATCH $(match_str) : $(s) ] ;
+    if ! $(split) { ret += $(s) ; continue ; }
+
+    local result = $(split[1]) ;
+    while $(split[2]) {
+      result += \\$(split[2]) ;
+      split = [ MATCH $(match_str) : $(split[3]) ] ;
+      result += $(split[1]) ;
+    }
+    ret += $(result:J) ;
+  }
+  return $(ret) ;
+}
+rule DebugDigestDiff # field : old_val : new_val : digest_fn
+{
+  if ! $(DbgDigest) { return ; }
+  if $(DbgDigest) = stop {
+    exit $(1) "\[
+" $(2) "
+"\] \!\= \["
+" $(3) "
+"\] in $(4) ;
+  }
+  echo $(1) \[ $(2) \] \!\= \[ $(3) \] in $(4) ;
+}
+rule ProcessTargetDigest # target : das_src
+{
+  local target_file = $($(1)__OutDir)/$(1) ;
+  local tmp_dir = $($(1)__TmpDir) ;
+  local digest = $(tmp_dir)/$(1:D=:G=).digest ;
+  local new_src = $($(1)__Sources) ;
+  if $($(1)__UsePCH) = yes { new_src += $($(1)__PrecompiledName).cpp ; }
+  local new_optCpp = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__CPP_OPT) ] ;
+  local new_optAsm = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__ASM_OPT) ] ;
+  local new_optC = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__C_OPT) ] ;
+  local new_optLink = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__LINK_OPT) ] ;
+  local new_gopt = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(GlobalCPPopt) ] ;
+  local new_lopt = ;
+  for src in $(sources) {
+    local lopt = ;
+    on $(src) lopt = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(opt) ] ;
+    new_lopt += $(src)?$(lopt:J=$) ;
+  }
+
+  target on $(digest) = $(1) ;
+  src on $(digest) = $(new_src) [ ReplaceRootPrefix $(2) ] ;
+  lopt on $(digest) = $(new_lopt) ;
+  gopt on $(digest) = [ AddEscapesToMakeJamValidForWrite $(new_gopt) ] ;
+  optCpp on $(digest) = [ AddEscapesToMakeJamValidForWrite $(new_optCpp) ] ;
+  optC on $(digest) = [ AddEscapesToMakeJamValidForWrite $(new_optC) ] ;
+  optAsm on $(digest) = [ AddEscapesToMakeJamValidForWrite $(new_optAsm) ] ;
+  optLink on $(digest) = [ AddEscapesToMakeJamValidForWrite $(new_optLink) ] ;
+  MakeDirectory $(digest) : $(digest:D) ;
+  Depends all : $(digest) ;
+  make_digest $(digest) ;
+
+  # load prev digest (if exists)
+  NOCARE $(digest) ;
+  include $(digest) ;
+
+  if ! $(digest_src) && ! $(digest_optCpp) && ! $(digest_optAsm) && ! $(digest_optC) &&
+     ! $(digest_optLink) && ! $(digest_gopt) && ! $(digest_lopt) {
+    # digest is missing, just force to create actual one
+    echo note: rebuild $(1) due to missing digest ;
+    ALWAYS $(target_file) ;
+    ALWAYS $(digest) ;
+    for s in $(new_src) { ALWAYS $(tmp_dir)/$(s:S=$(_OBJ_SUFFIX)) ; }
+    for s in $(2) { ALWAYS $(s:S=$(_OBJ_SUFFIX)) ; }
+    return ;
+  }
+
+  # compare prev and new digest
+  local relink_reasons = ;
+  on $(digest) if $(digest_src) != $(src) { relink_reasons += Sources ; }
+  if $(digest_optLink) != $(new_optLink) { relink_reasons += LINKopt ; }
+
+  local recompile_reasons = ;
+  recompile_list = ;
+  if $(digest_gopt) != $(new_gopt) {
+    DebugDigestDiff GlobalCPPopt : $(digest_gopt) : $(new_gopt) : $(digest) ;
+    recompile_reasons += GlobalCPPopt ;
+    MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .cpp .cxx .cc .mm .c .m .jamvar ;
+    MarkSourcesChanged $(2) : . : recompile_list : .cpp ;
+  }
+  if $(digest_optCpp) != $(new_optCpp) {
+    DebugDigestDiff CPPopt : $(digest_optCpp) : $(new_optCpp) : $(digest) ;
+    recompile_reasons += CPPopt ;
+    MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .cpp .cxx .cc .mm .jamvar ;
+    MarkSourcesChanged $(2) : . : recompile_list : .cpp ;
+  }
+  if $(digest_optC) != $(new_optC) {
+    DebugDigestDiff Copt : $(digest_optC) : $(new_optC) : $(digest) ;
+    recompile_reasons += Copt ;
+    MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .c .m ;
+  }
+  if $(digest_optAsm) != $(new_optAsm) {
+    DebugDigestDiff ASMopt : $(digest_optASm) : $(new_optAsm) : $(digest) ;
+    recompile_reasons += ASMopt ;
+    MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .asm .s .S .nas .s@nasm .nasm .masm ;
+  }
+  if $(digest_lopt) != $(new_lopt) {
+    recompile_reasons += 'opt\ on' ;
+    for l in $(new_lopt) {
+      if $(l) in $(digest_lopt) { continue ; }
+      local src_name = [ MATCH ([^?]+)?.+ : $(l) ] ;
+      local obj_path = $(tmp_dir)/$(src_name:S=$(_OBJ_SUFFIX)) ;
+      ALWAYS $(obj_path) ;
+      if ! $(src_name) in $(recompile_list) { recompile_list += $(src_name) ; }
+    }
+    for l in $(digest_lopt) {
+      if $(l) in $(new_lopt) { continue ; }
+      local src_name = [ MATCH ([^?]+)?.+ : $(l) ] ;
+      if ! $(src_name) in $(new_src) {
+        if ! 'opt\ on' in $(relink_reasons) { relink_reasons += 'opt\ on' ; }
+        continue ;
+      }
+      local obj_path = $(tmp_dir)/$(src_name:S=$(_OBJ_SUFFIX)) ;
+      ALWAYS $(obj_path) ;
+      if ! $(src_name) in $(recompile_list) { recompile_list += $(src_name) ; }
+    }
+  }
+
+  # mark targets changed if changes in digest require that (and report this for clarity)
+  if $(recompile_list) {
+    echo note: $(1) will rebuild modules due to $(recompile_reasons:J=", ") changed\:
+"
+      "$(recompile_list) ;
+  }
+  if $(relink_reasons) { echo note: relink $(1) due to $(relink_reasons:J=", ") changed ; Always $(target_file) ; }
+
+  if $(recompile_list) || $(relink_reasons) { ALWAYS $(digest) ; }
+  # clean up all used vars
+  digest_src = ;
+  digest_optCpp = ;
+  digest_optAsm = ;
+  digest_optC = ;
+  digest_optLink = ;
+  digest_gopt = ;
+  digest_lopt = ;
+  recompile_list = ;
+}
+actions together quietly make_digest
+{
+  echo digest_src = $(src) ; >$(1)
+  echo digest_optCpp = $(optCpp) ; >>$(1)
+  echo digest_optAsm = $(optAsm) ; >>$(1)
+  echo digest_optC = $(optC) ; >>$(1)
+  echo digest_optLink = $(optLink) ; >>$(1)
+  echo digest_gopt = $(gopt) ; >>$(1)
+  echo digest_lopt = $(lopt) ; >>$(1)
+}
+
 # process all targets and bind rules how to make them
 # gather full list of targets in __targets
 local __targets_to_clean = ;
@@ -1839,6 +2045,8 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
     if $(das_sources) {
       objs += [ AotCompileBatchedGeneratedDAS $(das_sources) : $(target) : $(tmp_dir) ] ;
     }
+
+    ProcessTargetDigest $(target) : $(das_sources) ;
 
     if $($(target)__TargetType) = lib {
       LibTarget $(out_dir)/$(target) : $(tmp_dir)/$(objs) : $(target) ;
