@@ -45,6 +45,9 @@
 
 # include <io.h>
 # include <sys/stat.h>
+#ifndef __DMC__
+  #include <direct.h>
+#endif
 
 #ifdef DOS386
 # include <dos.h>
@@ -328,6 +331,37 @@ file_archscan(
 	}
 
 	close( fd );
+}
+
+const char *file_simplify_rel_path(const char *path, char *stor, int stor_len)
+{
+  static char cur_dir[260] = "*";
+  static unsigned short cd_num_subfolder = 0, cd_subfolder_pos[32] = {0};
+  if (!path || !*path || path[0] != '.' || path[1] != '.')
+    return path;
+
+  if (cur_dir[0] == '*')
+  {
+    char *p = cur_dir;
+    getcwd(cur_dir, sizeof(cur_dir));
+    for (; *p; p++)
+      if (*p == '\\')
+        *p = '/';
+    for (p = cur_dir+strlen(cur_dir)-1; p > cur_dir; p--)
+      if (*p == '/')
+        cd_subfolder_pos[cd_num_subfolder++] = p+1 - cur_dir;
+  }
+
+  int subdirs = -1;
+  while (*path)
+    if (subdirs + 1 < cd_num_subfolder && path[0] == '.' && path[1] == '.' && (path[2] == '/' || path[2] == '\\'))
+      subdirs ++, path += 3;
+    else
+      break;
+  if (subdirs < 0)
+    return path;
+  _snprintf(stor, stor_len, "%.*s%s", cd_subfolder_pos[subdirs], cur_dir, path);
+  return stor;
 }
 
 # endif /* NT */

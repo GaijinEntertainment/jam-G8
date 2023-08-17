@@ -38,6 +38,7 @@
 # include "regexp.h"
 # include "headers.h"
 # include "newstr.h"
+# include "filesys.h"
 
 static LIST *headers1( const char *file, LIST *hdrscan );
 static LIST *headers1fs( const char *file, LIST *hdrscan );
@@ -98,8 +99,9 @@ headers1(
 	LIST	*result = 0;
 	regexp	*re[ MAXINC ];
 	char	buf[ 1024 ];
+	FILE_DECLARE_STOR_BUF(abs_name_stor);
 
-	if( !( f = fopen( file, "r" ) ) )
+	if( !( f = fopen( FILE_SIMPLIFY_REL_PATH(file, abs_name_stor), "r" ) ) )
 	    return result;
 
 	while( rec < MAXINC && hdrscan )
@@ -150,8 +152,9 @@ headers1fs(
 	regexp	*re[ MAXINC ];
 	char	*buf, *pbuf;
 	int len, found;
+	FILE_DECLARE_STOR_BUF(abs_name_stor);
 
-	if( !( f = fopen( file, "r" ) ) )
+	if( !( f = fopen( FILE_SIMPLIFY_REL_PATH(file, abs_name_stor), "r" ) ) )
 	    return result;
 
 	while( rec < MAXINC && hdrscan )

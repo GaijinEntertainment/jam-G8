@@ -3,6 +3,7 @@
 #include "execcmd.h"
 #include "outFilter.h"
 #include "variable.h"
+#include "filesys.h"
 #include <errno.h>
 #ifdef unix
 #include <unistd.h>
@@ -260,13 +261,14 @@ static int copy_file ( const char *src, const char *dest ) {
   //printf ( "copy %s to %s\n", src, dest );
   FILE *fp_in, *fp_out;
   char buf[4096];
+  FILE_DECLARE_STOR_BUF(src_abs_stor); FILE_DECLARE_STOR_BUF(dest_abs_stor);
 
   if ( !src || !dest )
     return 13;
-  fp_in = fopen ( src, "rb" );
+  fp_in = fopen (FILE_SIMPLIFY_REL_PATH(src, src_abs_stor), "rb" );
   if ( !fp_in )
     return 13;
-  fp_out = fopen ( dest, "wb" FOPEN_MODE_NO_INHERIT);
+  fp_out = fopen (FILE_SIMPLIFY_REL_PATH(dest, dest_abs_stor), "wb" FOPEN_MODE_NO_INHERIT);
   if ( !fp_out ) {
     fclose ( fp_in );
     return 13;
@@ -324,20 +326,25 @@ static void process_command (struct ExecSlot *ctx, char *cmd, char *params ) {
     if ( !p )
       fprintf(stdout, "%s\n", params);
     else {
+      FILE_DECLARE_STOR_BUF(abs_name_stor);
       char *fname = p+1;
+      const char *mode_str = "wt" FOPEN_MODE_NO_INHERIT;
       FILE *fp;
 
       *p = '\0';
       if ( *fname == '>' )
         fname ++;
       fname = strtok_r(fname, delim, &brkt);
-      fp = fopen ( fname, p[1]=='>' ? "at" FOPEN_MODE_NO_INHERIT : "wt" FOPEN_MODE_NO_INHERIT);
+      if (p[1]=='>')
+        mode_str = "at" FOPEN_MODE_NO_INHERIT;
+      fname = (char*)FILE_SIMPLIFY_REL_PATH(fname, abs_name_stor);
+      fp = fopen(fname, mode_str);
       if ( fp ) {
         fputs ( params, fp );
         fputc ( '\n', fp );
         fclose ( fp );
       } else {
-        printf ( "incorrect file: <%s>\n", fname );
+        printf ( "incorrect file: <%s> mode=\"%s\" errno=%d\n", fname, mode_str, errno );
         ctx->status = 1;
       }
     }

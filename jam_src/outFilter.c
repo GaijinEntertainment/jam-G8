@@ -2,6 +2,7 @@
 #include "outFilter.h"
 #include "regexp.h"
 #include "hash.h"
+#include "filesys.h"
 
 #include <string.h>
 #include <ctype.h>
@@ -148,7 +149,8 @@ void prepare_exec_out_filters(ExecOutputFilter *f)
       f->destFile[i] = stderr;
     else if (!f->destFile[i])
     {
-      f->destFile[i] = fopen(f->destFname[i], "wt");
+      FILE_DECLARE_STOR_BUF(abs_name_stor);
+      f->destFile[i] = fopen(FILE_SIMPLIFY_REL_PATH(f->destFname[i], abs_name_stor), "wt");
       if (!f->destFile[i])
         printf("ERROR: cannot open <%s> for write, redirected to NUL\n", f->destFname[i]);
     }
