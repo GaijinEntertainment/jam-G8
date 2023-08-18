@@ -271,7 +271,7 @@ if ! $(__DEFAULTS_INCLUDED) {
       out = $(Platform)~$(MacOSXVer)~m$(MacOSXMinVer) ;
       if $(MacOSXArch) = arm64 {
         local ver = [ MATCH "([^\.]+)\.(.+)" : $(MacOSXMinVer) ] ;
-        if ! $(ver[0]) || ! $(ver[0]) in 11 12 { Exit MacOSXArch=$(MacOSXArch) requires MacOSXMinVer 11+ ($(MacOSXMinVer) is not allowed) ; }
+        if ! $(ver[0]) || ! $(ver[0]) in 11 12 13 14 15 { Exit MacOSXArch=$(MacOSXArch) requires MacOSXMinVer 11+ ($(MacOSXMinVer) is not allowed) ; }
       }
       if $(MacOSXArch) != x86_64 { out = $(out)~$(MacOSXArch) ; }
       out = $(out)~$(PlatformOutputDir)~$(Config) ;
