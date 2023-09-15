@@ -206,7 +206,7 @@ rule DepRule
     }
   }
   Includes $(<) : $(changed_dep) ;
-  if $(GLOBAL_IncludesNoCare) { NOCARE $(changed_dep) ; }
+  null_action $(changed_dep) ;
 }
 
 

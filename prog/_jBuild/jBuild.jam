@@ -1476,6 +1476,9 @@ rule MakeLicenseBuildScript # lic_target_file : lic_list : target_name
 #
 # common actions
 #
+actions together quietly null_action
+{
+}
 
 # directory creation action
 actions together quietly MkDir

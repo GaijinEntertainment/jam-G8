@@ -387,7 +387,6 @@ if ! $(__DEFAULTS_INCLUDED) {
   SetupOutputDir ;
 
   if ( clean in $(JAMTARGETS) ) || ( this in $(JAMTARGETS) ) { GLOBAL_OmitDependencies = 1 ; }
-  if nocare in $(JAMTARGETS) { GLOBAL_IncludesNoCare = 1 ; }
   if depjam in $(JAMTARGETS) { GLOBAL_DependOnJam = 1 ; }
   if cache in $(JAMTARGETS) { GLOBAL_CacheDryRun = 1 ; }
   if clean in $(JAMTARGETS) { GLOBAL_CleanObj = clean ; }
