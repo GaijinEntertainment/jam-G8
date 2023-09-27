@@ -1,4 +1,4 @@
-#  Setup for gcc4 compiler for LINUX 64-bit (to be included from jBuild.jam)
+#  Setup for gcc compiler for LINUX 64-bit (to be included from jBuild.jam)
 StripType ?= debug ;
 
 _OBJ_SUFFIX  = .o ;

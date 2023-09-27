@@ -14,7 +14,7 @@ if ! $(__DEFAULTS_INCLUDED) {
   PlatformSpec_win32 ?= vc16 ;
   PlatformSpec_win64 ?= vc16 ;
   PlatformSpec_macosx ?= clang64 ;
-  PlatformSpec_linux64 ?= gcc4 ;
+  PlatformSpec_linux64 ?= gcc ;
   CLangVer ?= 14.0.6 ;
   DefaultCPPStd = 17 ;
   CPPStd ?= 17 ;
