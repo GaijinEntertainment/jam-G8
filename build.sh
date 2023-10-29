@@ -44,7 +44,7 @@ g++ -pipe _output/builtins.o _output/command.o _output/compile.o _output/expand.
 rm -rf _output
 cd ..
 rm ./jam
-./jam_0 -sRoot=. -f jam_src/Jamfile -a nocare
+./jam_0 -sRoot=. -f jam_src/jamfile -a nocare
 
 if [ -d "$devtool_dir" ]; then
   sudo cp jam $devtool_dir/jam
