@@ -16,7 +16,7 @@ rule ProcessLinkTarget
       _LINK_OPT = -Wl,-map -Wl,$($(Target)__TmpDir)/$(Target:S=.map) ;
       $(Target)__IMGBUILD = rem ;
     }
-    if $(CheckOnly) = yes { _LINK_OPT += -Wl,-S -Wl,-x ; }
+    if $(CheckOnly) = yes { _LINK_OPT += -Wl,-S -Wl,-x -Xlinker -no_deduplicate ; }
     _LINK_OPT += -Wl,-rpath -Wl,@executable_path/../Frameworks ;
 
     $(Target)__LINK      = $(_LINK) ;

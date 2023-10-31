@@ -44,8 +44,8 @@ rule ProcessCompileTarget
   }
 
   if $(StrictCompile) = yes {
-    if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] && ! [ MATCH /(devtools)/ : $(Location) ] {
-      _CPP_OPT += -Wunused-parameter -Werror=unused-parameter ;
+    if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] && ! [ MATCH /(devtools)/ : $(Location) ] { # Note: this doesn't work on 3rdp headers
+      _CPP_OPT += -Wunused-parameter ;
     }
   }
 
