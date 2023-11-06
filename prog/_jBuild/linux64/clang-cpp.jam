@@ -49,7 +49,7 @@ rule ProcessCompileTarget
     }
   }
 
-  $(Target)__CPP_OPT = -include memory/dag_memBase.h $(_CPP_OPT) ;
+  $(Target)__CPP_OPT = $(_CPP_OPT) ;
   $(Target)__C_OPT   = $(Copt) $(_CPP_OPT) ;
   $(Target)__ASM_OPT = -I$(AddIncludes) $(ASMopt) ;
 }

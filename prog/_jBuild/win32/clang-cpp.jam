@@ -64,7 +64,7 @@ rule ProcessCompileTarget
   _CPP_OPT = -I$(AddIncludes) $(_CONFIG_OPT) $(_SUPPRESS_OPT) $(CPPopt) $(GlobalCPPopt) ;
 
   include $(Root)/prog/_jBuild/_vc/add_fp_fast.jam ;
-  $(Target)__CPP_OPT = -FImemory/dag_memBase.h $(post_opt) $(_CPP_OPT) -TP ;
+  $(Target)__CPP_OPT = $(post_opt) $(_CPP_OPT) -TP ;
 
   if $(StrictCompile) = yes {
     if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] { $(Target)__CPP_OPT += -Wunused-parameter -Wunused-variable -Werror=unused-parameter -Werror=unused-variable /permissive- ; }
