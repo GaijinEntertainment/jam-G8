@@ -2,7 +2,16 @@
 devtool_dir=${_DEVTOOL:-/var/devtools}
 if [ ! -d "$devtool_dir" ]; then
   echo Devtools are not initialized at "$devtool_dir"
-  exit 1
+  devtool_dir=${_DEVTOOL:-~/devtools}
+  if [ "$_DEVTOOL" = "" ] && [ ! -d "$devtool_dir" ]; then
+    echo Creating Devtools at "$devtool_dir"
+    mkdir $devtool_dir
+  fi
+  if [ ! -d "$devtool_dir" ]; then
+    echo Devtools are not initialized at "$devtool_dir"
+    exit 1
+  fi
+  echo Using Devtools at "$devtool_dir"
 fi
 
 echo Building jam and setting it up at "$devtool_dir"
