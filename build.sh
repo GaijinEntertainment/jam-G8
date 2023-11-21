@@ -62,4 +62,4 @@ fi
 sudo cp jam /usr/local/bin/jam
 sudo chmod 777 /usr/local/bin/jam
 
-echo Jam set up at "$devtool_dir"
+echo Jam set up at "$devtool_dir" and /usr/local/bin
