@@ -19,6 +19,12 @@ echo Building jam and setting it up at "$devtool_dir"
 # force non-empty $_DEVTOOL, jamfiles will fail otherwise
 export _DEVTOOL=${_DEVTOOL:-$devtool_dir}
 export OSX_CPU_TYPE=`uname -m`
+if gcc -v |& grep -q ':e2k-'; then
+  # Elbrus-e2k lcc compiler doesn't support some gcc switches
+  jam_opt=-sRemoveCompilerSwitches_linux64/gcc="-minline-all-stringops"
+else
+  jam_opt=
+fi
 
 cd jam_src
 mkdir _output
@@ -53,7 +59,7 @@ g++ -pipe _output/builtins.o _output/command.o _output/compile.o _output/expand.
 rm -rf _output
 cd ..
 rm ./jam
-./jam_0 -sRoot=. -f jam_src/jamfile -a nocare
+./jam_0 -sRoot=. $jam_opt -f jam_src/jamfile -a nocare
 
 if [ -d "$devtool_dir" ]; then
   sudo cp jam $devtool_dir/jam

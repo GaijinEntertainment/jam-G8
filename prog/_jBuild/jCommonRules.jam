@@ -69,3 +69,13 @@ if ! $(Platform) in macosx {
     if $(1[3]) { ProcessBundleCopy $(1[3-]) ; }
   }
 }
+
+rule StripStrings # in_string_list : in_string_list_to_strip
+{
+  if $(2) {
+    local filtered = ;
+    for s in $(1) { if ! $(s) in $(2) { filtered += $(s) ; } }
+    return $(filtered) ;
+  }
+  return $(1) ;
+}
