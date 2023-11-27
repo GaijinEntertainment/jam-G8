@@ -19,7 +19,7 @@ echo Building jam and setting it up at "$devtool_dir"
 # force non-empty $_DEVTOOL, jamfiles will fail otherwise
 export _DEVTOOL=${_DEVTOOL:-$devtool_dir}
 export OSX_CPU_TYPE=`uname -m`
-if gcc -v |& grep -q ':e2k-'; then
+if gcc -v 2>&1 | grep -q ':e2k-'; then
   # Elbrus-e2k lcc compiler doesn't support some gcc switches
   jam_opt=-sRemoveCompilerSwitches_linux64/gcc="-minline-all-stringops"
 else
