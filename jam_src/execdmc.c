@@ -698,7 +698,7 @@ static void __cdecl exec_job_thread(void *p)
     }
     else
     {
-      sprintf(etaStr, "%us", mdsec / mssec);
+      sprintf(etaStr, "%0.2fs", (mdsec + 0.0f) / mssec);
     }
     printf("[%5u/%u ETA %s (%i jobs)] ", ctx->stats.index, bstat_get_total_updating(), etaStr, parallelism);
   }
