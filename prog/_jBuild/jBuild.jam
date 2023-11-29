@@ -457,16 +457,10 @@ rule ProcessTargetVariables
       }
     }
 
-    if $(Platform) in win32 win64 && $(UseDirectX) = yes {
-      if ! [ GLOB $(_DXSDK_DIR).$(DirectXVer) : * ] { exit FATAL\: \"$(_DXSDK_DIR).$(DirectXVer)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\dacache\\devtools\\ ; }
-    }
-
     ProcessCompileTarget ;
 
     PreAddIncludes = ;
     AddIncludes = ;
-    UseDirectX = ;
-    UseWTL = ;
 
     if $(TargetType) in exe dll {
       if $(IsProgArtifact) = yes && $(SignatureID) {
@@ -521,6 +515,11 @@ rule ProcessTargetVariables
       ProcessBundlePlist $(BundlePlist) : $(CopyTo) : $(AddBundlePlist) ;
       BundlePlist = ;
       AddBundlePlist = ;
+    }
+
+    if $(FrameworkResBundle) {
+      CopyFrameworkResBundle $(FrameworkResBundle) ;
+      FrameworkResBundle = ;
     }
 
     $(Target)__RC_OPT = $(RCopt) ;
@@ -626,8 +625,6 @@ rule ClearTargetVariables
   MultiTarget = ;
   PreAddIncludes = ;
   AddIncludes = ;
-  UseDirectX = ;
-  UseWTL = ;
   UseQuirrel = ;
   AddLibs = ;
   Resources = ;
@@ -651,24 +648,6 @@ rule ClearTargetVariables
   UsePCH = ;
   PrecompiledName = ;
   EcsGenOpt = ;
-}
-
-# directory creation rules
-rule MakeDirectory
-{
-  local _dir = $(>:G=:J=\\) ;
-
-  if $(>)
-  {
-    #LOCATE on $(<) = $(_dir) ;
-    Depends $(<) : $(_dir[1]:G=dir) ;
-
-    # Make a directory and all its parent directories;
-    # ignore timestamps on directories: we only care if they exist.
-    NoUpdate $(_dir[1]:G=dir) ;
-
-    MkDir $(_dir[1]:G=dir) ;
-  }
 }
 
 # rule how to link target
@@ -1397,44 +1376,6 @@ rule LinkDllSetMapExpLib
   }
 }
 
-# adds include switch to parameter
-#   params: ( post_opt : pre_opt )
-rule AddDirectXInclude
-{
-  if $(UseDirectX) = yes {
-    if $(DirectXVer) in $(C_preopt_DirectXVer) {
-      $(1) += $(IncludeMSVCDir)$(_DXSDK_DIR).$(DirectXVer)/include ;
-    } else {
-      $(2) += $(IncludeMSVCDir)$(_DXSDK_DIR).$(DirectXVer)/include ;
-    }
-  }
-}
-
-# adds libpath switch to parameter
-#   params: ( cmd_line )
-rule AddDirectXLibs
-{
-  if $(UseDirectX) = yes && $(WinSdkVer) != win.sdk.81 {
-    switch $(Platform) {
-      case win32 : $(1) += -libpath:$(_DXSDK_DIR).$(DirectXVer)/lib/x86 ;
-      case win64 : $(1) += -libpath:$(_DXSDK_DIR).$(DirectXVer)/lib/x64 ;
-    }
-  }
-}
-
-rule AddWtlInclude
-{
-  if $(UseWTL) = yes { $(1) += -I$(Root)/prog/3rdPartyLibs/wtl-8.1/include/$(2)_atl -I$(Root)/prog/3rdPartyLibs/wtl-8.1/include ; }
-}
-rule AddWtlLibs
-{
-  if $(UseWTL) = yes { $(1) += -libpath:$(Root)/prog/3rdPartyLibs/wtl-8.1/lib/$(2)_atl $(3) ; }
-}
-
-rule AddForceFastcall
-{
-}
-
 rule AddMissingDefaultOpts
 {
   for t in $(3) { if $(t) in $($(1)) { return ; } }
@@ -1476,15 +1417,6 @@ rule MakeLicenseBuildScript # lic_target_file : lic_list : target_name
 #
 # common actions
 #
-actions together quietly null_action
-{
-}
-
-# directory creation action
-actions together quietly MkDir
-{
-  if not exist $(1) mkdir $(1)
-}
 
 # execute jam
 actions together quietly execute_jam
@@ -2127,6 +2059,11 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
     }
   }
 }
+
+VC_SHOW_INCLUDES_FILTER_PREFIX = "Note: including file:[	 ]*" ; # matching regexp in en-US locale
+VC_START_SHOW_INCLUDES_FILTER = # force en-US locale
+  set VSLANG=1033 "
+  set_filter nul" /$(VC_SHOW_INCLUDES_FILTER_PREFIX)$(_DEVTOOL_RE)(.+)/ ; # filter out paths pointing to _DEVTOOL
 
 if $(GLOBAL_BuildDevtool)
 {

@@ -84,6 +84,9 @@ rule ProcessCompileTarget
     #   C4577 'noexcept' used with no exception handling mode specified
     #   C5220 a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are non trivial
     #   C5219 implicit conversion. That is GOOD warning, we would rather fix it everywhere!
+    #   C5245 'function': unreferenced function with internal linkage has been removed
+    #   C5246 'member': the initialization of a subobject should be wrapped in braces
+    #   C5264 'variable-name': 'const' variable is not used
 
     _SUPPRESS_OPT = -Wall -WX /wd4514 /wd4061 /wd4820 /wd4668 /wd4619
                     /wd4365 /wd4127 /wd4302 /wd4242 /wd4244 /wd4265
@@ -102,6 +105,9 @@ rule ProcessCompileTarget
                     /wd5052
                     /wd5204 /wd4577
                     /wd4866 # warning C4866: compiler may not enforce left-to-right evaluation order for call to operator_name
+                    /wd5245 # Some functions' overloads aren't used and the compiler warns to remove then
+                    /wd5246 # the MSC has the CWG defect #1270 and offers the old initialization behaviour, https://stackoverflow.com/a/70127399
+                    /wd5264 # falsely identifies static const variables unused
     ;
     _SUPPRESS_OPT += /permissive- ;
   }
@@ -166,7 +172,6 @@ rule ProcessCompileTarget
   }
 
   if $(DriverLinkage) = static { _CONFIG_OPT += -D_TARGET_STATIC_LIB=1 ; }
-  if $(StarForce) = yes        { _CONFIG_OPT += -DSTARFORCE_PROTECT ; }
   if $(UseWholeOpt) = yes      { _CONFIG_OPT += /GL ; }
 
   if $(Analyze) = yes          { _CONFIG_OPT += /analyze ; }
@@ -175,14 +180,8 @@ rule ProcessCompileTarget
 
   _CPP_OPT = -I$(AddIncludes) $(_CONFIG_OPT) $(_SUPPRESS_OPT) $(CPPopt) $(GlobalCPPopt) ;
 
-  AddForceFastcall _CPP_OPT ;
-  AddDirectXInclude pre_opt : post_opt ;
-  AddWtlInclude pre_opt : vc8 ;
-
-  if $(QtVer) { AddQtCompileOpt ; }
-
   include $(Root)/prog/_jBuild/_vc/add_fp_fast.jam ;
-  $(Target)__CPP_OPT = -FImemory/dag_memBase.h $(post_opt) $(_CPP_OPT) -TP ;
+  $(Target)__CPP_OPT = $(_CPP_OPT) -TP ;
   $(Target)__C_OPT   = $(post_opt) $(Copt) $(_CPP_OPT) ;
   $(Target)__ASM_OPT = -I$(AddIncludes)/ $(ASMopt) ;
   $(Target)__PRE_OPT = $(pre_opt) ;
@@ -226,8 +225,8 @@ rule CheckHeaders
 actions together quietly compile_cpp
 {
 #async
-  set_filter nul /Note\: including file\:[	 ]*$(_DEVTOOL_RE)(.+)/
-  set_filter $(1:S=.d) /Note\: including file\:[	 ]*(.+)/d1 $(1:G=:D=): $1
+  $(VC_START_SHOW_INCLUDES_FILTER)
+  set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
   call_filtered $(_CPP_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) -showIncludes #\(-Fo$(1) $(2:G=))\#
   if errorlevel 1 goto failed
   if not exist $(1) goto failed
@@ -255,8 +254,8 @@ actions together quietly compile_prefast_cpp
 actions together quietly compile_c
 {
 #async
-  set_filter nul /Note\: including file\:[	 ]*$(_DEVTOOL_RE)(.+)/
-  set_filter $(1:S=.d) /Note\: including file\:[	 ]*(.+)/d1 $(1:G=:D=): $1
+  $(VC_START_SHOW_INCLUDES_FILTER)
+  set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
   call_filtered $(_C_COMPILER) $(pre_opt) $(_C_BASE_INCLUDES) $(c_opt) -showIncludes #\(-Fo$(1) $(2:G=))\#
   if errorlevel 1 goto failed
   if not exist $(1) goto failed

@@ -7,12 +7,11 @@ _CLANG_DIR   = $(_DEVTOOL)/LLVM-$(CLangVer) ;
 if ! [ GLOB $(_CLANG_DIR) : * ] { exit FATAL\: \"$(_CLANG_DIR)\" not found! ; }
 if $(VCUpdateVer) { _VC_DIR = $(_VC_DIR)_$(VCUpdateVer) ; }
 _VC_CRT_TYPE = -MT ;
-C_preopt_DirectXVer = jun2010 ;
 _WIN_SDK_TARGET_SUFFIX = x64 ;
 include $(Root)/prog/_jBuild/_vc/win_sdk.jam ;
 
-if ! [ GLOB $(_VC_DIR) : * ] { exit FATAL\: \"$(_VC_DIR)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\Y\\Soft\\forDevelopers\\devtools\\vc2015.7z ; }
-if ! [ GLOB $(_WIN_SDK) : * ] { exit FATAL\: \"$(_WIN_SDK)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\Y\\Soft\\forDevelopers\\devtools\\$(WinSdkVer).7z ; }
+if ! [ GLOB $(_VC_DIR) : * ] { exit FATAL\: \"$(_VC_DIR)\" not found!  Please, update DEVTOOLS ; }
+if ! [ GLOB $(_WIN_SDK) : * ] { exit FATAL\: \"$(_WIN_SDK)\" not found!  Please, update DEVTOOLS ; }
 if ! [ GLOB $(_DEVTOOL)/win.sdk.100/Include/10.0.19041.0 : * ] { exit FATAL\: \"$(_DEVTOOL)/win.sdk.100/Include/10.0.19041.0\" not found!  Please, update DEVTOOLS ; }
 
 local _DEF_C_CMDLINE =
@@ -58,29 +57,17 @@ if $(Sanitize) != disabled {
   _DEF_C_CMDLINE += -fsanitize=$(Sanitize) ;
 }
 
+if ! $(CLangVer) in 14.0.6 12.0.1 11.0.0 10.0.0 { # >= 15 implied
+  _DEF_C_CMDLINE += -Wno-deprecated-builtins ; # __has_trivial_constructor etc in EASTL. See also https://github.com/llvm/llvm-project/commit/0b89d1d59f82cf5b45c250cd5c3351e43ce35ef9
+}
+
 if $(SSEVersion) = 4  {
   _DEF_C_CMDLINE += -msse4.1 -mpopcnt ;
 } else {
   _DEF_C_CMDLINE += -msse2 ;
 }
 
-if $(QtVer) {
-  _QT_DIR = $(_DEVTOOL)/Qt-$(QtVer)-vc2008 ;
-  if ! [ GLOB $(_QT_DIR) : * ] { exit FATAL\: \"$(_QT_DIR)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\Y\\Soft\\forDevelopers\\devtools\\Qt-$(QtVer)-vc2008.7z ; }
-
-  _DEF_C_CMDLINE +=
-    -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_GUI_LIB -DQT_CORE_LIB
-    -D_STD_RTL_MEMORY=1
-    /Zc:wchar_t-
-  ;
-  if $(QtVerStatic) = yes { _DEF_C_CMDLINE += -DQT_NODLL ; } else { _VC_CRT_TYPE = -MD ; }
-
-  _QT_MOC = $(_QT_DIR)/bin/moc.exe  ;
-  _QT_UIC = $(_QT_DIR)/bin/uic.exe ;
-  _QT_RCC = $(_QT_DIR)/bin/rcc.exe ;
-} else {
-  _DEF_C_CMDLINE += /Zc:wchar_t ;
-}
+_DEF_C_CMDLINE += /Zc:wchar_t ;
 
 if $(UseWholeOpt) = yes {
   UseLLDLink = yes ;
@@ -114,14 +101,6 @@ _UCRT_INC       = $(_DEVTOOL)/win.sdk.100/Include/10.0.19041.0/ucrt ;
 _INCLUDE = $(_UCRT_INC) $(_WIN_SDK_INC) $(_VC_DIR)/include ;
 _LIBPATH = $(_UCRT_LIB) $(_WIN_SDK_LIB) $(_CLANG_DIR)/lib/clang/$(CLangVer)/lib/windows $(_VC_DIR)/lib/x64 $(_UM_LIB) ;
 
-_INCLUDE +=
-  $(_QT_DIR)/include/QtCore
-  $(_QT_DIR)/include/QtGui
-  $(_QT_DIR)/include/ActiveQt
-  $(_QT_DIR)/include
-  $(_QT_DIR)/mkspecs/win64-msvc2008
-;
-
 # make linker cmd-line ###
 for lib in $(_LIBPATH) {
   _LINK += -libpath:$(lib) ;
@@ -135,7 +114,6 @@ _CPP_BASE_INCLUDES = $(_C_BASE_INCLUDES) -I$(Root)/prog/3rdPartyLibs/eastl/inclu
 for inc in $(_INCLUDE) {
   _CPP_BASE_INCLUDES += -imsvc $(inc) ;
   _C_BASE_INCLUDES   += -imsvc $(inc) ;
-  _DEP_COMPILER += --x$(inc) ;
 }
 
 _DEF_C_CMDLINE = ;

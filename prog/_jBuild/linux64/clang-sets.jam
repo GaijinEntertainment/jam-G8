@@ -61,8 +61,8 @@ if $(Sanitize) != disabled {
 }
 
 _LIB          = ar ranlib ;
-_C_COMPILER   = $(DISTCC) clang $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) ;
-_CPP_COMPILER = $(DISTCC) clang $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) ;
+_C_COMPILER   = $(DISTCC) clang [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
+_CPP_COMPILER = $(DISTCC) clang [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
 _ASM_COMPILER = nasm -f elf64 ;
 _GAS_COMPILER = $(DISTCC) clang -g -c ;
 

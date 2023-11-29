@@ -71,11 +71,15 @@ if $(StripType) != all {
   _LINK += -rdynamic ;
 }
 
+if $(CheckOnly) != yes {
+  _LINK += -Wl,--gc-sections ;
+}
+
 CC  ?= gcc ;
 CXX ?= g++ ;
 
-_C_COMPILER   = $(CC) $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) ;
-_CPP_COMPILER = $(CXX) $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) ;
+_C_COMPILER   = $(CC) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
+_CPP_COMPILER = $(CXX) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
 _ASM_COMPILER = nasm -f elf64 ;
 _GAS_COMPILER = $(CC) -g -c ;
 

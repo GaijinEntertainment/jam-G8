@@ -1,0 +1,81 @@
+# general-purpose python-based file stringifier
+if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
+else if $(OS) in MACOSX { PYTHON_EXE = python ; }
+else if $(OS) in LINUX { PYTHON_EXE = python ; }
+
+actions together quietly null_action
+{
+}
+
+# directory creation action
+actions together quietly MkDir
+{
+  if not exist $(1) mkdir $(1)
+}
+
+# directory creation rules
+rule MakeDirectory
+{
+  local _dir = $(>:G=:J=\\) ;
+
+  if $(>)
+  {
+    #LOCATE on $(<) = $(_dir) ;
+    Depends $(<) : $(_dir[1]:G=dir) ;
+
+    # Make a directory and all its parent directories;
+    # ignore timestamps on directories: we only care if they exist.
+    NoUpdate $(_dir[1]:G=dir) ;
+
+    MkDir $(_dir[1]:G=dir) ;
+  }
+}
+
+if $(OS) = NT {
+  actions together quietly raw_copy_file
+  {
+    echo * copy file to:   $(file)
+    set_filter nul /1 file\(s\) copied/
+    call_filtered $(ComSpec) /C copy /Y /B /V #\( $(2) $(1) )\#
+    clr_filters
+    if not exist $(1) set errorlevel=13
+  }
+} else {
+  actions together quietly raw_copy_file
+  {
+    echo * copy file to:   $(file)
+    call cp $(2) $(1)
+    $(post_copy_cmd)
+    if not exist $(1) set errorlevel=13
+  }
+}
+
+rule BundleCopyFile
+{
+  local dest = $(OutDir)/$(2) ;
+  local src = [ LocationBasedToAbsPath $(3) ] ;
+
+  Depends $(1) : $(dest) ;
+  MakeDirectory $(dest) : $(dest:D) ;
+  Depends $(dest) : $(src) ;
+  file on $(dest) = $(2) ;
+  raw_copy_file $(dest) : $(src) ;
+}
+
+if ! $(Platform) in macosx {
+  rule ProcessBundleCopy
+  {
+    BundleCopyFile $(OutDir)/$(Target) : $(1[2]) : $(1[1]) ;
+    if $(1[3]) { ProcessBundleCopy $(1[3-]) ; }
+  }
+}
+
+rule StripStrings # in_string_list : in_string_list_to_strip
+{
+  if $(2) {
+    local filtered = ;
+    for s in $(1) { if ! $(s) in $(2) { filtered += $(s) ; } }
+    return $(filtered) ;
+  }
+  return $(1) ;
+}

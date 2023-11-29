@@ -34,6 +34,13 @@ actions together quietly convert_plist_file
   if not exist $(1) set errorlevel=13
 }
 
+actions together quietly convert_strings_file
+{
+  echo * converting loc strings: $(1)
+  call plutil -convert binary1 -o $(1) $(2)
+  if not exist $(1) set errorlevel=13
+}
+
 actions together quietly make_lang_file
 {
   echo * create lang:    $(lang)
@@ -174,6 +181,20 @@ rule ProcessBundlePng
   convert_png_file $(OutDir)/$(dest) : $(src) ;
 
   if $(1[3]) { ProcessBundlePng $(1[3-]) ; }
+}
+
+rule ProcessBundleCustomLang
+{
+  local src = [ LocationBasedToAbsPath $(1[1]) ] ;
+  local dest = $(1[2]) ;
+
+  MakeDirectory all : $(OutDir)/$(dest:D) ;
+  if $(SignTarget) { Depends $(SignTarget) : $(OutDir)/$(dest) ; }
+  Depends $(OutDir)/$(dest) : $(src) ;
+  lngs on $(OutDir)/$(dest) = $(dest) ;
+  convert_strings_file $(OutDir)/$(dest) : $(src) ;
+
+  if $(1[3]) { ProcessBundleCustomLang $(1[3-]) ; }
 }
 
 rule ProcessBundleXib

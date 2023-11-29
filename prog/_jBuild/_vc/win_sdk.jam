@@ -11,6 +11,7 @@ if $(WinSdkVer) = win.sdk.81 {
 }
 if $(WinSdkVer) = win.sdk.100 {
   _WIN_SDK_TARGET_SUFFIX ?= x86 ;
+  if [ GLOB $(_WIN_SDK_BIN) : 10.0.19041.0 ] { _WIN_SDK_BIN = $(_WIN_SDK_BIN)/10.0.19041.0 ; }
   _WIN_SDK_INC = $(_DEVTOOL)/win.sdk.100/include/10.0.19041.0/um $(_DEVTOOL)/win.sdk.100/include/10.0.19041.0/shared ;
   _WIN_SDK_LIB = $(_DEVTOOL)/win.sdk.100/lib/10.0.19041.0/um ;
 }
@@ -21,8 +22,8 @@ if $(_WIN_SDK_TARGET_SUFFIX) {
 
 actions together quietly compile_pch_sync
 {
-  set_filter nul /Note\: including file\:[	 ]*$(_DEVTOOL_RE)(.+)/
-  set_filter $(1:S=.d) /Note\: including file\:[	 ]*(.+)/d1 $(1:G=:D=): $1
+  $(VC_START_SHOW_INCLUDES_FILTER)
+  set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
   del $(pch)
   call_filtered $(_CPP_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) /Fp$(pch) -showIncludes #\(-Fo$(1) $(2:G=))\#
   if errorlevel 1 goto failed

@@ -15,7 +15,7 @@ if ! $(__DEFAULTS_INCLUDED) {
   PlatformSpec_win64 ?= vc16 ;
   PlatformSpec_macosx ?= clang64 ;
   PlatformSpec_linux64 ?= gcc ;
-  CLangVer ?= 14.0.6 ;
+  CLangVer ?= 15.0.7 ;
   DefaultCPPStd = 17 ;
   CPPStd ?= 17 ;
   Sanitize ?= disabled ;
@@ -28,7 +28,10 @@ if ! $(__DEFAULTS_INCLUDED) {
     case linux64 : PlatformSpec ?= $(PlatformSpec_linux64) ;
     case * :       PlatformSpec ?= none ;
   }
-  if $(PlatformSpec) = vc16
+  if $(PlatformSpec) = vc17
+  {
+    VCUpdateVer ?= 17.5.4 ;
+  } else if $(PlatformSpec) = vc16
   {
     VCUpdateVer ?= 16.10.3 ;
   } else if $(PlatformSpec) = vc15
@@ -47,34 +50,22 @@ if ! $(__DEFAULTS_INCLUDED) {
   IncludeSystemDir ?= -I ;
   IncludeMSVCDir ?= -I ;
 
-  DefQtVer      = 4.7.3 ;
-
   Config        ?= dev ;
   CoreLinkage   ?= static ;
   DriverLinkage ?= static ;
-  StarForce     ?= no ;
-  MacOSXVer     ?= 10.11 ;
+  MacOSXVer     ?= 11.0 ;
   MacOSXMinVer  ?= $(MacOSXVer) ;
   MacOSXArch    ?= x86_64 ;
   WinSdkVer     ?= win.sdk.100 ;
-  DirectXVer    ?= jun2010 ;
   UseD3DMulti   ?= no ;
   MSVectorcall  ?= no ;
-  DefBulletSdkVer  ?= 2.82 ;
-  BulletSdkVer  ?= $(DefBulletSdkVer) ;
   ForceLogs     ?= no ;
-  UsePCH        ?= no ;
-  PrecompiledName ?= stdafx ;
-  DefaultSNCOptimization ?= yes ;
   UseLtoJobs    ?= 0 ;
-  TencentEnabled ?= no ;
   CheckOnly     ?= no ;
   ForcePdb      ?= no ;
-  DefOpenSSLVer = 1.1 ;
-  OpenSSLVer    ?= $(DefOpenSSLVer) ;
-  UseZlibVer    ?= ng ;
-  OpenXrVer     ?= 1.0.16 ;
   BundleVersion ?= 1.0.0 ;
+
+  if ! $(Platform) in win32 win64 { DisableUsingPCH ?= yes ; }
 
   if $(Config) = dbg {
     CheckedContainers ?= yes ;
@@ -97,10 +88,6 @@ if ! $(__DEFAULTS_INCLUDED) {
   SSEVersion ?= 2 ;
   VCMathOption ?= -fp:fast ;
 
-  if ! $(Platform) in win32 win64 {
-    UsePCH = ;
-  }
-  
   if $(FullOOPEnabled) = yes {
     Exceptions ?= yes ;
     CatchSEH ?= yes ;
@@ -119,20 +106,6 @@ if ! $(__DEFAULTS_INCLUDED) {
 
   if $(Config) = dbg {
     FastLink ?= yes ; # this speed-up linking but pdb become dependand on obj output
-  }
-
-  if $(Platform) = win32 || $(Platform) = macosx {
-    if $(QtVer) = def { QtVer = $(DefQtVer) ; }
-    if $(QtVer) { QtVerStatic ?= no ; }
-  } else {
-    QtVer = ;
-    QtVerStatic = ;
-  }
-
-  switch $(Platform) {
-    case win32 :   PhysXSdk ?= 2.8.4 ;
-    case win64 :   PhysXSdk ?= 2.8.4 ;
-    case * :       PhysXSdk ?= none ;
   }
 
   if $(OS) = MACOSX {
@@ -186,14 +159,6 @@ if ! $(__DEFAULTS_INCLUDED) {
   _DEVTOOL_RE ?= $(_DEVTOOL) ;
   _DEVTOOL = $(_devtool_s) ;
   if $(GDEVTOOL) { GDEVTOOL = $(_devtool_s) ; }
-
-  PhysXSdkPath = $(_DEVTOOL)/PhysX.SDK.$(PhysXSdk) ;
-  _DXSDK_DIR   = $(_DEVTOOL)/dx9.sdk ;
-
-  OpenXrSdkPath = $(_DEVTOOL)/openxr-$(OpenXrVer) ;
-  if $(VRDeviceSupport) = yes && ! [ GLOB $(OpenXrSdkPath) : * ] {
-    exit OpenXr SDK not found in $(OpenXrSdkPath), please update devtools ;
-  }
 
   if $(GOUT_ROOT) {
     local slashes = [ MATCH "(.*[\\])" : $(GOUT_ROOT) ] ;
@@ -259,7 +224,7 @@ if ! $(__DEFAULTS_INCLUDED) {
   {
     local out ;
 
-    if $(PlatformSpec) in vc14 vc14u vc15 vc16 && $(VCUpdateVer) {
+    if $(PlatformSpec) in vc14 vc14u vc15 vc16 vc17 && $(VCUpdateVer) {
       PlatformOutputDir ?= $(PlatformSpec)-$(VCUpdateVer) ;
     } else if $(PlatformSpec) = clang && $(Platform) in win32 win64 {
       PlatformOutputDir ?= $(PlatformSpec)~$(CLangVer) ;
@@ -300,8 +265,6 @@ if ! $(__DEFAULTS_INCLUDED) {
       out = $(out)~v ;
     }
 
-    if $(QtVer) { if $(QtVerStatic) = yes { out = $(out)~qt$(QtVer)s ; } else { out = $(out)~qt$(QtVer) ; } }
-
     if $(DriverLinkage) = dynamic {
       out = $(out)~krnlimp ;
       if $(CoreLinkage) = dynamic { out = $(out)~coreimp ; }
@@ -318,10 +281,8 @@ if ! $(__DEFAULTS_INCLUDED) {
         case * : Exit Unsupported VCMathOption\=$(VCMathOption) ;
       }
     }
-    if $(StarForce) = yes {
-      out = $(out)~sf ;
-    }
     if $(ForceLogs) = yes {
+      if $(Config) != rel { Exit why set ForceLogs=$(ForceLogs) for Config=$(Config) \!\= rel  ?? ; }
       if ! -DDAGOR_FORCE_LOGS=1 in $(GlobalCPPopt) { GlobalCPPopt += -DDAGOR_FORCE_LOGS=1 ; }
       out = $(out)~log ;
     }
@@ -370,16 +331,6 @@ if ! $(__DEFAULTS_INCLUDED) {
       out = $(out)~who ;
     }
 
-    if $(UseSystemOpenSSL) = yes {
-      out = $(out)~sslsys ;
-    } else if $(OpenSSLVer) != $(DefOpenSSLVer) {
-      out = $(out)~ssl$(OpenSSLVer) ;
-    }
-
-    if $(BulletSdkVer) != $(DefBulletSdkVer) {
-      out = $(out)~bt$(BulletSdkVer) ;
-    }
-
     _Output   = $(_OutputRoot)/$(out) ;
     _PrintedOutput   = [$(out)] ;
   }
@@ -403,10 +354,6 @@ if ! $(__DEFAULTS_INCLUDED) {
     JAM_EXE = jam ;
   }
 
-  # general-purpose python-based file stringifier
-  if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
-  else if $(OS) in MACOSX { PYTHON_EXE = python ; }
-  else if $(OS) in LINUX { PYTHON_EXE = python ; }
-
+  include $(Root)/prog/_jBuild/jCommonRules.jam ;
   NotFile ALL_CODEGEN_TARGET ;
 }

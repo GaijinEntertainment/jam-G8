@@ -43,12 +43,12 @@ rule ProcessCompileTarget
     _CPP_OPT += -fPIC ;
   }
   if $(StrictCompile) = yes {
-    if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] && ! [ MATCH /(devtools)/ : $(Location) ] {
-      _CPP_OPT += -Wunused-parameter -Werror=unused-parameter ;
+    if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] && ! [ MATCH /(devtools)/ : $(Location) ] { # Note: this doesn't work on 3rdp headers
+      _CPP_OPT += -Wunused-parameter ;
     }
   }
 
-  $(Target)__CPP_OPT = -include memory/dag_memBase.h $(_CPP_OPT) ;
+  $(Target)__CPP_OPT = $(_CPP_OPT) ;
   $(Target)__C_OPT   = $(Copt) $(_CPP_OPT) ;
   $(Target)__ASM_OPT = -I$(AddIncludes) $(ASMopt) ;
 }

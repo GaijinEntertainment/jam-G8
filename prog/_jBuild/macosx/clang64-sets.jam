@@ -13,6 +13,7 @@ local _DEF_COM_CMDLINE =
   -Wno-nonportable-include-path -Wno-null-dereference
   -Wno-undefined-var-template -Wno-constant-conversion
   -Wno-inconsistent-missing-override
+  -Wno-deprecated-builtins -Wno-unused-command-line-argument
   -ffunction-sections -fdata-sections
   -ffast-math -ffinite-math-only -fno-reciprocal-math
   "\"-D__forceinline=inline __attribute__((always_inline))\"" -D__cdecl= -D__stdcall= -D__fastcall
@@ -20,7 +21,7 @@ local _DEF_COM_CMDLINE =
   -D_vsnprintf=vsnprintf
   -Dstricmp=strcasecmp
   -Dstrnicmp=strncasecmp
-  -D_TARGET_PC=2 -D_TARGET_PC_MACOSX=2 -D_TARGET_STATIC_LIB=1 -D_TARGET_64BIT=1
+  -D_TARGET_PC=2 -D_TARGET_PC_MACOSX=2 -D_TARGET_APPLE=1 -D_TARGET_STATIC_LIB=1 -D_TARGET_64BIT=1
   -D__MACOSX__=1
   -Di_strlen=strlen
 ;

@@ -7,12 +7,11 @@ _VC_DIR      = $(_DEVTOOL)/vc2019 ;
 if $(VCUpdateVer) { _VC_DIR = $(_VC_DIR)_$(VCUpdateVer) ; }
 _PREFAST_DIR = $(_DEVTOOL)/prefast ;
 _VC_CRT_TYPE = -MT ;
-C_preopt_DirectXVer = jun2010 ;
 _WIN_SDK_TARGET_SUFFIX = x64 ;
 include $(Root)/prog/_jBuild/_vc/win_sdk.jam ;
 
-if ! [ GLOB $(_VC_DIR) : * ] { exit FATAL\: \"$(_VC_DIR)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\dacache\\devtools\\vc2019.* ; }
-if ! [ GLOB $(_WIN_SDK) : * ] { exit FATAL\: \"$(_WIN_SDK)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\dacache\\devtools\\$(WinSdkVer) ; }
+if ! [ GLOB $(_VC_DIR) : * ] { exit FATAL\: \"$(_VC_DIR)\" not found!  Please, update DEVTOOLS ; }
+if ! [ GLOB $(_WIN_SDK) : * ] { exit FATAL\: \"$(_WIN_SDK)\" not found!  Please, update DEVTOOLS ; }
 if ! [ GLOB $(_DEVTOOL)/win.sdk.100/Include/10.0.19041.0 : * ] { exit FATAL\: \"$(_DEVTOOL)/win.sdk.100/Include/10.0.19041.0\" not found!  Please, update DEVTOOLS ; }
 
 local _DEF_C_CMDLINE =
@@ -24,26 +23,8 @@ local _DEF_C_CMDLINE =
   /DDELAYIMP_INSECURE_WRITABLE_HOOKS
 #  -D_STD_RTL_MEMORY=1
   /c /nologo /Zc:forScope /Zp8 /J
-  /Zc:inline /bigobj
+  /Zc:inline /bigobj /Zc:wchar_t
 ;
-
-if $(QtVer) {
-  _QT_DIR = $(_DEVTOOL)/Qt-$(QtVer)-vc2008 ;
-  if ! [ GLOB $(_QT_DIR) : * ] { exit FATAL\: \"$(_QT_DIR)\" not found!  Please, update it from \\\\FS.GAIJIN.LAN\\Y\\Soft\\forDevelopers\\devtools\\Qt-$(QtVer)-vc2008.7z ; }
-
-  _DEF_C_CMDLINE +=
-    -DQT_LARGEFILE_SUPPORT -DQT_THREAD_SUPPORT -DQT_GUI_LIB -DQT_CORE_LIB
-    -D_STD_RTL_MEMORY=1
-    /Zc:wchar_t-
-  ;
-  if $(QtVerStatic) = yes { _DEF_C_CMDLINE += -DQT_NODLL ; } else { _VC_CRT_TYPE = -MD ; }
-
-  _QT_MOC = $(_QT_DIR)/bin/moc.exe  ;
-  _QT_UIC = $(_QT_DIR)/bin/uic.exe ;
-  _QT_RCC = $(_QT_DIR)/bin/rcc.exe ;
-} else {
-  _DEF_C_CMDLINE += /Zc:wchar_t ;
-}
 
 if $(UseWholeOpt) = yes {
   UseLLDLink = no ;
@@ -77,14 +58,6 @@ if ! $(_UM_LIB:L) in $(_LIBPATH:L) {
   _LIBPATH += $(_UM_LIB) ;
 }
 
-_INCLUDE +=
-  $(_QT_DIR)/include/QtCore
-  $(_QT_DIR)/include/QtGui
-  $(_QT_DIR)/include/ActiveQt
-  $(_QT_DIR)/include
-  $(_QT_DIR)/mkspecs/win64-msvc2008
-;
-
 
 # make linker cmd-line ###
 for lib in $(_LIBPATH) {
@@ -99,7 +72,6 @@ _C_BASE_INCLUDES   = -I$(MasterPreInclude) -I$(Root)/prog/dagorInclude -I$(Root)
 for inc in $(_INCLUDE) {
   _CPP_BASE_INCLUDES += -I$(inc) ;
   _C_BASE_INCLUDES   += -I$(inc) ;
-  _DEP_COMPILER += --x$(inc) ;
 }
 
 _DEF_C_CMDLINE = ;
