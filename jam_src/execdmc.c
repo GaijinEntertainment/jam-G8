@@ -667,7 +667,7 @@ static void __cdecl exec_job_thread(void *p)
 
 
   int willOutput = strstr(string, "echo ") != NULL;
-  //unsigned long long eta_msec = ctx->stats.estimated_msec ? *ctx->stats.estimated_msec : 0;
+  //unsigned long long eta_msec = bstat_get_estimated_time(ctx->stats.estimated_id);
   //printf("[%2i %5u/%5u ETA %.3f (%.3fs)] %s", ctx - &exec_slots[0],
   //  ctx->stats.index, bstat_get_total_updating(), bstat_get_total_eta_msec() /(1000.0f*1), eta_msec/1000.0f,
   //  willOutput ? "" : "\n");
@@ -745,7 +745,7 @@ static void __cdecl exec_job_thread(void *p)
   tm.tv_nsec = execTimeEnd.tv_nsec - execTimeStart.tv_nsec;
   unsigned long long total_msec = tm.tv_sec * 1000 + tm.tv_nsec/1000000;
 
-  bstat_record_time_spent(ctx->stats.estimated_msec, total_msec);
+  bstat_record_time_spent(ctx->stats.estimated_id, total_msec);
 
 end:
   if ( intr )

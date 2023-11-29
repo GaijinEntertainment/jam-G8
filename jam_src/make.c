@@ -523,10 +523,10 @@ make0(
 		if (!(t->flags & (T_FLAG_NOTFILE | T_FLAG_INTERNAL)))
 		{
 			hashedname = hash_block64(t->name, strlen(t->name));
-			t->estimated_msec = 0;
+			t->estimated_id = -1;
 
 			if (hashedname)
-				t->estimated_msec = bstat_add_target(hashedname);
+				t->estimated_id = bstat_add_target(hashedname);
 		}
 		counts->updating++;
 	}

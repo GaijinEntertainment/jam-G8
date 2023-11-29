@@ -321,7 +321,7 @@ make1c( TARGET *t, int targetIndex )
 	    {
 		fflush( stdout );
 		EXECSTATS exstats;
-		exstats.estimated_msec = t->estimated_msec;
+		exstats.estimated_id = t->estimated_id;
 		exstats.index = targetIndex;
 		execcmd( cmd->buf, make1d, t, cmd->shell, exstats );
 	    }

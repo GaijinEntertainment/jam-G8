@@ -17,7 +17,7 @@ typedef struct _execstats EXECSTATS;
 
 struct _execstats {
 	int index;
-	unsigned long long* estimated_msec;
+	int estimated_id;
 } ;
 
 

@@ -63,28 +63,36 @@ void bstat_save()
     free(etaTable);
 }
 
-unsigned long long* bstat_add_target(unsigned long long target_hash)
+int bstat_add_target(unsigned long long target_hash)
 {
     for( int j = 0; j < etaTableCnt; j++ )
 	{
 	    if (etatab_hash(j) == target_hash)
         {
             totalETA_msec += *etatab_time(j);
-		    return etatab_time(j);
+		    return j;
         }
     }
     etatab_ensure_fits(etaTableCnt+1);
     etatab_set_hash(etaTableCnt, target_hash);
 	etaTableCnt += 1;
-	return etatab_time(etaTableCnt-1);		
+	return etaTableCnt-1;
 }
 
-void bstat_record_time_spent(unsigned long long* stat_ptr, unsigned long long time_msec)
+unsigned long long bstat_get_estimated_time(int id)
 {
+    if (id < 0)
+        return 0;
+    return *etatab_time(id);
+}
+
+void bstat_record_time_spent(int id, unsigned long long time_msec)
+{
+    if (id < 0)
+        return;
     //FIXME: interlocked increment
     totalTimeSpent_msec += time_msec;
-    if (stat_ptr)
-        *stat_ptr = time_msec;
+    *etatab_time(id) = time_msec;
 }
 
 unsigned long long bstat_get_total_eta_msec()

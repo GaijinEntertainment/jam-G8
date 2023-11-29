@@ -163,7 +163,7 @@ struct _target {
 	TARGETS		*parents;	/* used by make1() for completion */
 	char		*cmds;		/* type-punned command list */
 
-	unsigned long long* estimated_msec;
+	int estimated_id;
 } ;
 
 RULE 	*bindrule( const char *rulename );
