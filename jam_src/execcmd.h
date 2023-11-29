@@ -13,11 +13,20 @@
 void exec_prepare();
 void exec_finish();
 
+typedef struct _execstats EXECSTATS;
+
+struct _execstats {
+	int index;
+	unsigned long long* estimated_msec;
+} ;
+
+
 void execcmd(
 	char *string,
 	void (*func)( void *closure, int status ),
 	void *closure,
-	LIST *shell );
+	LIST *shell,
+	EXECSTATS execstats);
 
 int execwait();
 

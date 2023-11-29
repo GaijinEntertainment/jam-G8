@@ -62,6 +62,7 @@
 # include "make.h"
 # include "headers.h"
 # include "command.h"
+# include "buildstats.h"
 
 #ifdef JAM2VS
 #	include <jam2vs.h>
@@ -132,6 +133,8 @@ make(
 
 	memset( (char *)counts, 0, sizeof( *counts ) );
 
+	bstat_load();
+
 	for( i = 0; i < n_targets; i++ )
 	{
 	    TARGET *t = bindtarget( targets[i] );
@@ -156,8 +159,12 @@ make(
 
 	status = counts->cantfind || counts->cantmake;
 
+	bstat_set_total_updating(counts->updating);
+
 	for( i = 0; i < n_targets; i++ )
 	    status |= make1( bindtarget( targets[i] ) );
+
+	bstat_save();
 
 	t2 = clock();
 	if (t2-t0 > CLOCKS_PER_SEC/10)
@@ -169,6 +176,31 @@ make(
 #ifndef _WIN32
   #undef clock
 #endif
+
+#define HASH_EMPTY64    0
+#define HASH_KILLED64    1
+
+unsigned long long hash_block64(const char * block, size_t size) {
+  const unsigned long long fnv_prime = 1099511628211ul;
+  unsigned long long offset_basis = 14695981039346656037ul;
+  for ( ; size >=4; size-=4 ) {
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+            offset_basis = ( offset_basis ^ *block++ ) * fnv_prime;
+        }
+        if (size & 2u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
+        if (size & 1u) {
+            offset_basis = (offset_basis ^ *block++) * fnv_prime;
+        }
+        if (offset_basis <= HASH_KILLED64) {
+            return fnv_prime;
+        }
+        return offset_basis;
+}
 
 /*
  * make0() - bind and scan everything to make a TARGET
@@ -476,7 +508,9 @@ make0(
 	    return;
 
 	if( !( ++counts->targets % 1000 ) && DEBUG_MAKE )
-	    printf( "...patience...\n" );
+	    printf( "scanning targets %u\r", counts->targets);
+
+	unsigned long long hashedname = 0;
 
 	if( fate == T_FATE_ISTMP )
 	    counts->temp++;
@@ -485,7 +519,17 @@ make0(
 	else if( fate == T_FATE_CANTMAKE && t->actions )
 	    counts->cantmake++;
 	else if( fate >= T_FATE_BUILD && fate < T_FATE_BROKEN && t->actions )
-	    counts->updating++;
+	{
+		if (!(t->flags & (T_FLAG_NOTFILE | T_FLAG_INTERNAL)))
+		{
+			hashedname = hash_block64(t->name, strlen(t->name));
+			t->estimated_msec = 0;
+
+			if (hashedname)
+				t->estimated_msec = bstat_add_target(hashedname);
+		}
+		counts->updating++;
+	}
 
 	if( !( t->flags & T_FLAG_NOTFILE ) && fate >= T_FATE_SPOIL )
 	    flag = "+";

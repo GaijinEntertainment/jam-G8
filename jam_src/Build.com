@@ -24,6 +24,7 @@ $ cxx /define=VMS timestamp.c
 $ cxx /define=VMS variable.c
 $ cxx /define=VMS jam.c
 $ cxx /define=VMS jamgram.c
+$ cxx /define=VMS buildstats.c
 $ cxxlink/exe=jam.exe command.obj, compile.obj, execvms.obj, expand.obj, -
     filevms.obj, glob.obj, hash.obj, headers.obj, lists.obj, make.obj, -
     make1.obj, newstr.obj, option.obj, parse.obj, pathvms.obj, regexp.obj, -

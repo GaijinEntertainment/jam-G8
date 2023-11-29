@@ -11,11 +11,13 @@
 #include <pthread.h>
 #else
 #include <process.h>
+#include <time.h>
 #include <io.h>
 #ifndef __DMC__
   #include <direct.h>
 #endif
 #endif
+#include "buildstats.h"
 
 #ifdef DOS386
 enum { MAX_CMDLINE_LEN = 128 };
@@ -40,13 +42,13 @@ struct ExecSlot {
   char *pending_goto;
   int useRespFile;
   ExecOutputFilter exec_out_filter;
+  EXECSTATS stats;
 };
 
 static const char *delim = " \t\r\n\v";
 static struct ExecSlot exec_slots[MAXJOBS] = { 0 };
 static int intr = 0;
 static int cmdsrunning = 0;
-
 
 static void process_string_command ( struct ExecSlot *ctx, char *string, const char *pend );
 
@@ -663,6 +665,48 @@ static void __cdecl exec_job_thread(void *p)
   if (intr)
     goto end;
 
+
+  int willOutput = strstr(string, "echo ") != NULL;
+  //unsigned long long eta_msec = ctx->stats.estimated_msec ? *ctx->stats.estimated_msec : 0;
+  //printf("[%2i %5u/%5u ETA %.3f (%.3fs)] %s", ctx - &exec_slots[0],
+  //  ctx->stats.index, bstat_get_total_updating(), bstat_get_total_eta_msec() /(1000.0f*1), eta_msec/1000.0f,
+  //  willOutput ? "" : "\n");
+
+  if (willOutput)
+  {
+    int parallelism = bstat_get_total_updating() - ctx->stats.index;
+    if (parallelism > globs.jobs)
+      parallelism = globs.jobs;
+    if (parallelism == 0)
+      parallelism = 1;
+
+    unsigned long long eta_msec = bstat_get_total_eta_msec() / parallelism;
+    char etaStr[256];
+    const int mssec = 1000;
+    const int msmin = 60 * 1000;
+    const int mshr  = 60 * 60 * 1000;
+    int mdsec = eta_msec % msmin;
+    int mdmin = (eta_msec - mdsec) % mshr;
+    int mdhr = (eta_msec - mdsec - mdmin);
+    if (eta_msec > mshr)
+    {
+      sprintf(etaStr, "%uh %um %us", mdhr / mshr, mdmin / msmin, mdsec / mssec);
+    }
+    else if (eta_msec > msmin)
+    {
+      sprintf(etaStr, "%um %us", mdmin / msmin, mdsec / mssec);
+    }
+    else
+    {
+      sprintf(etaStr, "%us", mdsec / mssec);
+    }
+    printf("[%5u/%5u ETA %s (%i jobs)] ", ctx->stats.index, bstat_get_total_updating(), etaStr, parallelism);
+  }
+
+
+  struct timespec execTimeStart;
+  clock_gettime(CLOCK_MONOTONIC, &execTimeStart);
+
   // process command string
   prepare_execcmd(ctx);
   preprocess_string_slash(string);
@@ -693,6 +737,16 @@ static void __cdecl exec_job_thread(void *p)
   }
   finish_execcmd(ctx);
 
+  struct timespec execTimeEnd;
+  clock_gettime(CLOCK_MONOTONIC, &execTimeEnd);
+
+  struct timespec tm;
+  tm.tv_sec = execTimeEnd.tv_sec - execTimeStart.tv_sec;
+  tm.tv_nsec = execTimeEnd.tv_nsec - execTimeStart.tv_nsec;
+  unsigned long long total_msec = tm.tv_sec * 1000 + tm.tv_nsec/1000000;
+
+  bstat_record_time_spent(ctx->stats.estimated_msec, total_msec);
+
 end:
   if ( intr )
     ctx->status = 255; //interrupted
@@ -710,8 +764,9 @@ static const char *check_async_label(char *str)
   return strncmp(str, "#async", 6)==0 ? str+6 : NULL;
 }
 void execcmd( char *string, void (*func)( void *closure, int status ), void *closure,
-              LIST *shell )
+              LIST *shell, EXECSTATS stats )
 {
+
   int slot;
   const char *req_async = check_async_label(string);
 
@@ -734,6 +789,7 @@ void execcmd( char *string, void (*func)( void *closure, int status ), void *clo
   exec_slots[slot].closure = closure;
   exec_slots[slot].status = 0;
   exec_slots[slot].string = intr ? NULL : strdup(req_async ? req_async : string);
+  exec_slots[slot].stats = stats;
   string[0] = '\0';
 
   // Catch interrupts whenever commands are running

@@ -162,6 +162,8 @@ struct _target {
 	int		asynccnt;	/* child deps outstanding */
 	TARGETS		*parents;	/* used by make1() for completion */
 	char		*cmds;		/* type-punned command list */
+
+	unsigned long long* estimated_msec;
 } ;
 
 RULE 	*bindrule( const char *rulename );
