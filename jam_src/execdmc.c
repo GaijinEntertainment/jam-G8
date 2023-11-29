@@ -700,7 +700,7 @@ static void __cdecl exec_job_thread(void *p)
     {
       sprintf(etaStr, "%us", mdsec / mssec);
     }
-    printf("[%5u/%5u ETA %s (%i jobs)] ", ctx->stats.index, bstat_get_total_updating(), etaStr, parallelism);
+    printf("[%5u/%u ETA %s (%i jobs)] ", ctx->stats.index, bstat_get_total_updating(), etaStr, parallelism);
   }
 
 
