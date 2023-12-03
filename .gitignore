@@ -1,0 +1,5 @@
+# ignore build files
+_output/
+build/
+jam
+jam.debuginfo
