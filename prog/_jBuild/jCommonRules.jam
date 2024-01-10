@@ -3,7 +3,7 @@ if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
 else if $(OS) in MACOSX { PYTHON_EXE = python ; }
 else if $(OS) in LINUX { PYTHON_EXE = python ; }
 
-actions together quietly null_action
+actions together quietly ignore null_action
 {
 }
 
