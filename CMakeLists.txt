@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(jam-G8)
+set(TARGET_NAME "jam")
 
 # file(GLOB_RECURSE SRCS jam_src/*.c)
 file(GLOB_RECURSE SRCS
@@ -33,11 +34,11 @@ jam_src/outFilter.c
 
 file(GLOB_RECURSE HEADERS src/*.h)
 
-add_executable(${PROJECT_NAME} ${SRCS})
+add_executable(${TARGET_NAME} ${SRCS})
 
 # install
 install(TARGETS 
-  ${PROJECT_NAME}
+  ${TARGET_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
