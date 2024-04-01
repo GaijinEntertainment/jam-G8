@@ -30,5 +30,10 @@ if $(OS) = MACOSX {
   Copt = -Wno-parentheses ;
   if $(OSX_CPU_TYPE) = arm64 { PlatformArch ?= arm64 ; MacOSXMinVer ?= 11.0 ; }
 }
+if $(PlatformArch) = e2k {
+  PlatformSpec = gcc ;
+  RemoveCompilerSwitches_linux/gcc = -mno-recip -minline-all-stringops -fconserve-space ;
+  Copt += -march=elbrus-v3 ;
+}
 
 include $(Root)/prog/_jBuild/build.jam ;
