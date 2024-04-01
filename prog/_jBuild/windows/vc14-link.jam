@@ -1,5 +1,4 @@
 #  to be included in jBuild.jam
-
 UseLinkWholeOpt ?= $(UseWholeOpt) ;
 
 if $(UseLLDLink) = yes
@@ -10,27 +9,27 @@ if $(UseLLDLink) = yes
 FileAlignLinkOption ?= -filealign ;
 LINK_RESPONCE_FILE ?= ;
 
-PdbCompressOpt ?= yes ;
-
 rule SignPackageRule
 {
 }
 
 rule ProcessLinkTarget
 {
-  BaseAddress ?= 0x00400000 ;
-
   local _WIN_LIBS = user32.lib ole32.lib kernel32.lib gdi32.lib winmm.lib dbghelp.lib ;
+  if $(Sanitize) = address { _WIN_LIBS += clang_rt.asan-x86_64.lib ; }
+  _WIN_LIBS += $(AdditionalWinLibs) ;
+  if $(PlatformArch) = x86 { BaseAddress ?= 0x00400000 ; }
 
   if $(TargetType) = exe
   {
-    _LINK_OPT = -nologo $(FileAlignLinkOption):512 -base:$(BaseAddress) -incremental:no /LARGEADDRESSAWARE ;
+    _LINK_OPT = -nologo $(FileAlignLinkOption):512 -base:$(BaseAddress) -incremental:no ;
+    if $(PlatformArch) = x86 { _LINK_OPT += /LARGEADDRESSAWARE ; }
+    if $(Sanitize) != disabled { _LINK_OPT += /FUNCTIONPADMIN ; }
 
-    if $(ConsoleExe) = yes {
-      _LINK_OPT += -subsystem:console,\"5.01\" ;
-    } else {
-      _LINK_OPT += -subsystem:windows,\"5.01\" ;
-    }
+    local __sstype = windows ; local __ssver = 5.02 ;
+    if $(ConsoleExe) = yes { __sstype = console ; }
+    if $(PlatformArch) = x86 { __ssver = 5.01 ; }
+    _LINK_OPT += -subsystem:$(__sstype),\"$(__ssver)\" ;
 
     _LINK_OPT += -nodefaultlib:LIBMMT -nodefaultlib:LIBIRC -nodefaultlib:LIBC ;
     if $(_VC_CRT_TYPE) = -MT {
@@ -47,7 +46,6 @@ rule ProcessLinkTarget
         _LINK_OPT += -nodefaultlib:LIBCMT -nodefaultlib:LIBCPMT ;
       }
     } else {
-      _LINK_OPT += -nodefaultlib:LIBMMT -nodefaultlib:LIBIRC -nodefaultlib:LIBC ;
       if $(Config) != dbg {
         _WIN_LIBS += MSVCRT.lib MSVCPRT.lib UCRT.lib VCRUNTIME.lib ;
         _LINK_OPT += -nodefaultlib:LIBCMT -nodefaultlib:LIBCPMT ;
@@ -58,7 +56,7 @@ rule ProcessLinkTarget
     }
 
     if $(Config) != dbg {
-      _LINK_OPT += /OPT:REF,ICF ;
+      if $(PlatformArch) = x86 { _LINK_OPT += /OPT:REF,ICF ; } else { _LINK_OPT += -opt:ref ; }
     }
 
     if $(UseLinkWholeOpt) = yes {
@@ -87,7 +85,8 @@ rule ProcessLinkTarget
   }
   else if $(TargetType) = dll
   {
-    _LINK_OPT = -nologo -dll -subsystem:windows -base:$(BaseAddress) -incremental:no /LARGEADDRESSAWARE ;
+    _LINK_OPT = -nologo -dll -subsystem:windows -base:$(BaseAddress) -incremental:no ;
+    if $(PlatformArch) = x86 { _LINK_OPT += /LARGEADDRESSAWARE ; }
     if $(Config) != dbg {
       _LINK_OPT += -opt:ref ;
     }
@@ -102,7 +101,7 @@ rule ProcessLinkTarget
     LinkDllSetMapExpLib $(Target) : $(OutDir) : ;
   }
 
-  local _ADD_LIBS = " " $(1) ;
+  local _ADD_LIBS = $(1) ;
 
   if $(TargetType) = exe {
     _ADD_LIBS += $(_WIN_LIBS) ;

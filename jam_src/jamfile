@@ -22,13 +22,13 @@ Sources =
 ;
 
 if $(OS) = NT {
-  Platform ?= win64 ;
+  PlatformArch ?= x86_64 ;
   Copt = -DNT ;
   Sources += filent.c ;
 }
 if $(OS) = MACOSX {
   Copt = -Wno-parentheses ;
-  if $(OSX_CPU_TYPE) = arm64 { MacOSXArch ?= arm64 ; MacOSXMinVer ?= 11.0 ; }
+  if $(OSX_CPU_TYPE) = arm64 { PlatformArch ?= arm64 ; MacOSXMinVer ?= 11.0 ; }
 }
 
 include $(Root)/prog/_jBuild/build.jam ;

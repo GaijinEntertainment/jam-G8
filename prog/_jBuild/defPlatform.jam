@@ -1,10 +1,16 @@
 switch $(OS) {
-  case NT     : Platform  ?= win32 ;
-  case MACOSX : Platform  ?= macosx ;
-  case LINUX  : Platform  ?= linux64 ;
+  case NT     : Platform  ?= windows ;
+  case MACOSX : Platform  ?= macOS ;
+  case LINUX  : Platform  ?= linux ;
 }
+PlatformArch_windows ?= x86 ;
+PlatformArch_linux ?= x86_64 ;
+PlatformArch_macOS ?= x86_64 ;
 
-if $(Platform) in win32 win64 macosx linux64 {
+PlatformArch ?= $(PlatformArch_$(Platform)) ;
+PlatformArch ?= x86_64 ;
+
+if $(Platform) in windows macOS linux {
   PlatformDataFormatCode ?= PC ;
 } else {
   PlatformDataFormatCode ?= PC ; # unknown, let it be PC format

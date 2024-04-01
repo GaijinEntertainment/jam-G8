@@ -8,30 +8,29 @@ rule ProcessCompileTarget
   local pre_opt = ;
   local post_opt = ;
 
+  local O3 = -Xclang -O3 /Gy /Gw ;
+  if $(PlatformArch) = x86 { O3 += /Oy- ; }
+  if $(CheckOnly) = yes { O3 = /Od ; }
   switch $(Config) {
     case dev :
-      if $(CheckOnly) != yes { _CONFIG_OPT = -Xclang -O3 /Gy /Gw /Oy- ; } else { _CONFIG_OPT = /Od ; }
-      _CONFIG_OPT += -DDAGOR_DBGLEVEL=1 ;
+      _CONFIG_OPT += $(O3) -DDAGOR_DBGLEVEL=1 ;
     case rel :
-      _CONFIG_OPT = -Xclang -O3 /Gy /Gw /Oy- -DDAGOR_DBGLEVEL=0 -DNDEBUG=1 -D_SECURE_SCL=0 ;
+      _CONFIG_OPT = $(O3) -DDAGOR_DBGLEVEL=0 -DNDEBUG=1 -D_SECURE_SCL=0 ;
     case irel :
-      _CONFIG_OPT = -Xclang -O3 /Gy /Gw /Oy- -DDAGOR_DBGLEVEL=-1 -DNDEBUG=1 -D_SECURE_SCL=0 ;
+      _CONFIG_OPT = $(O3) -DDAGOR_DBGLEVEL=-1 -DNDEBUG=1 -D_SECURE_SCL=0 ;
     case dbg :
       _CONFIG_OPT = /Od /RTC1 -DDAGOR_DBGLEVEL=2 ;
-    case analyze :
-      _CONFIG_OPT = -Xclang -O3 /Gy /Gw /Oy- -DDAGOR_DBGLEVEL=1 /analyze ;
-    case prefast :
-      _CONFIG_OPT = -Xclang -O3 /Gy /Gw /Oy- -DDAGOR_DBGLEVEL=1 ;
     case * :
       _CONFIG_OPT = ;
   }
+  if $(PlatformArch) = x86_64 && $(MSVectorcall) = yes { _CONFIG_OPT += /Gv ; }
   if $(CheckOnly) != yes { _CONFIG_OPT += /Zi ; }
   if $(StackProtection) = no { _CONFIG_OPT += /GS- ; }
 
   if $(Exceptions) != yes {
     _CONFIG_OPT += -D_HAS_EXCEPTIONS=0 -DEA_COMPILER_NO_NOEXCEPT ;
   } else {
-    if ($CatchSEH) != yes {
+    if $(CatchSEH) != yes {
       _CONFIG_OPT += /EHsc -DDAGOR_EXCEPTIONS_ENABLED=1 ;
     } else {
       _CONFIG_OPT += /EHac -DDAGOR_EXCEPTIONS_ENABLED=1 ;
@@ -48,7 +47,7 @@ rule ProcessCompileTarget
     _CONFIG_OPT += $(_VC_CRT_TYPE)d ;
   }
 
-  if $(DriverLinkage) = static { _CONFIG_OPT += -D_TARGET_STATIC_LIB=1 ; }
+  if $(KernelLinkage) = static { _CONFIG_OPT += -D_TARGET_STATIC_LIB=1 ; }
   if $(UseWholeOpt) != no {
     if $(UseWholeOpt) = yes {
       _CONFIG_OPT += -flto=thin ;
@@ -56,8 +55,6 @@ rule ProcessCompileTarget
       _CONFIG_OPT += -flto=$(UseWholeOpt) ;
     }
   }
-
-  if $(Analyze) = yes          { _CONFIG_OPT += /analyze ; }
 
   _CONFIG_OPT += /FS ;         # Force Synchronous PDB Writes.
 
@@ -84,7 +81,7 @@ rule DepRule
   # add $(Root) prefix when needed
   for dep in $(>)
   {
-    switch $(dep) 
+    switch $(dep)
     {
       case ?:* : changed_dep += $(dep) ;   # absolute path with drive
       case \\* : changed_dep += $(dep) ;   # absolute path with root foolder (\)
@@ -125,19 +122,6 @@ actions together quietly compile_cpp
   :end
 
   clr_filters
-  $(CODE_CHECK) -x $(1) $(2)
-}
-
-actions together quietly compile_prefast_cpp
-{
-  set PATH=#\($(_VC_DIR)/bin)\#
-  call $(_PREFAST_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) #\(-Fo$(1) $(2:G=))\#
-  if errorlevel 1 goto failed
-  if not exist $(1) goto failed
-  goto end
-  :failed
-  set ERRORLEVEL=13
-  :end
 }
 
 actions together quietly compile_c
@@ -155,7 +139,6 @@ actions together quietly compile_c
   :end
 
   clr_filters
-  $(CODE_CHECK) -x $(1) $(2)
 }
 
 include $(Root)/prog/_jBuild/_vc/win_rc.jam ;

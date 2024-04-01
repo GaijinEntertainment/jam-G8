@@ -146,7 +146,7 @@ rule ProcessBundleCopy
   local dest = $(1[2]) ;
 
   MakeDirectory $(OutDir)/$(dest) : $(OutDir)/$(dest:D) ;
-  if $(SignTarget) { Depends $(SignTarget) : $(OutDir)/$(dest) ; }
+  if $(SignTarget) { Depends $(SignTarget) : $(OutDir)/$(dest) ; } else { Depends all : $(OutDir)/$(dest) ; }
   Depends $(OutDir)/$(dest) : $(src) ;
   file on $(OutDir)/$(dest) = $(dest) ;
   raw_copy_file $(OutDir)/$(dest) : $(src) ;
@@ -223,7 +223,8 @@ rule ProcessBundlePlist
   plist on $(OutDir)/$(dest) = $(dest) ;
   local icon = $(BundleIcon) ;
   icon ?= $(Target:B) ;
-  local executable = $(BundleExe) ;
+  local executable = $($(Target)-BundleExe) ;
+  executable ?= $(BundleExe) ;
   executable ?= $(Target:B) ;
   opt on $(OutDir)/$(dest) =
     "-e "\"s|%MACOSX_VER%|$(MacOSXMinVer)|g\"
@@ -339,4 +340,4 @@ rule CopyFrameworkBundle
   CopyDepsRecursively $(OutDir)/$(Target) : $(src) $(dst) : ;
 }
 
-include $(Root)/prog/_jBuild/macosx/mkdevtools.jam ;
+include $(Root)/prog/_jBuild/macOS/mkdevtools.jam ;

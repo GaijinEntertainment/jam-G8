@@ -11,7 +11,7 @@ local _DEF_COM_CMDLINE =
   -Wno-undefined-var-template -Wno-inconsistent-missing-override
   -Wno-deprecated-builtins # for EASTL that uses deprecated builtins. remove after EASTL update
   -ffunction-sections -fdata-sections -fno-omit-frame-pointer
-  -ffast-math -ffinite-math-only -minline-all-stringops
+  -ffast-math -ffinite-math-only -mrecip=none -minline-all-stringops
   -fdiagnostics-absolute-paths
   "\"-D__forceinline=inline __attribute__((always_inline))\"" -D__cdecl= -D__stdcall= -D__fastcall=
   -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
@@ -19,14 +19,15 @@ local _DEF_COM_CMDLINE =
   -D_vsnprintf=vsnprintf
   -Dstricmp=strcasecmp
   -Dstrnicmp=strncasecmp
-  -D_TARGET_PC=3 -D_TARGET_PC_LINUX=3 -D_TARGET_STATIC_LIB=1
+  -D_TARGET_PC=3 -D_TARGET_PC_LINUX=3
   -D_TARGET_64BIT=1
   -D__LINUX__=64
   -D_TARGET_SIMD_SSE=$(SSEVersion)
   -Di_strlen=(int)strlen
   -D__STDC_CONSTANT_MACROS
 ;
-if $(DriverLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB=1 ; }
+if $(KernelLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB=1 ; }
+if $(PlatformArch) = e2k { _DEF_COM_CMDLINE += -D_XM_NO_INTRINSICS_ ; }
 
 local STDLIB_COMP = -stdlib=libstdc++ ;
 local STDLIB_LINK = -stdlib=libstdc++ -lstdc++ ;
@@ -51,8 +52,13 @@ if $(Rtti) != yes {
   _DEF_CPP_CMDLINE += -frtti ;
 }
 
-_LINK         = clang -pipe -m64 -rdynamic -isysroot /usr/include $(STDLIB_LINK) -lm ;
-_LINK_DLL     = clang -pipe -m64 -isysroot /usr/include -shared ;
+_CLANG_BIN    = clang ;
+if $(CLangVerMajor) {
+  _CLANG_BIN = $(_CLANG_BIN)-$(CLangVerMajor) ;
+}
+
+_LINK         = $(_CLANG_BIN) -pipe -m64 -rdynamic -isysroot /usr/include $(STDLIB_LINK) -lm ;
+_LINK_DLL     = $(_CLANG_BIN) -pipe -m64 -isysroot /usr/include -shared ;
 
 if $(Sanitize) != disabled {
   _LINK = $(_LINK) -fsanitize=$(Sanitize) ;
@@ -61,10 +67,10 @@ if $(Sanitize) != disabled {
 }
 
 _LIB          = ar ranlib ;
-_C_COMPILER   = $(DISTCC) clang [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
-_CPP_COMPILER = $(DISTCC) clang [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
+_C_COMPILER   = $(DISTCC) $(_CLANG_BIN) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
+_CPP_COMPILER = $(DISTCC) $(_CLANG_BIN) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
 _ASM_COMPILER = nasm -f elf64 ;
-_GAS_COMPILER = $(DISTCC) clang -g -c ;
+_GAS_COMPILER = $(DISTCC) $(_CLANG_BIN) -g -c ;
 
 
 _INCLUDE      = $(Root)/prog/dagorInclude $(Root)/prog/1stPartyLibs $(Root)/prog/3rdPartyLibs ;
