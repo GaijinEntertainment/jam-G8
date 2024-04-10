@@ -686,7 +686,10 @@ rule LinkTarget
   local copy_tdir ;
   local copy_t ;
   for copy_tdir in $(4) {
-    copy_t = $(copy_tdir)/$(1:G=:D=) ;
+    local target_exe_name = $(1:G=:D=) ;
+    # add proper postfix when copying exe so we can create universal binary
+    if $(Platform) = macOS && $(MacRelPath) != "" { target_exe_name = $(1:G=:D=)-$(PlatformArch) ; }
+    copy_t = $(copy_tdir)/$(target_exe_name) ;
     __targets += $(copy_t) ;
 
     Depends $(copy_t) : $(1) ;
@@ -1792,10 +1795,10 @@ rule ProcessTargetDigest # target : das_src
   local new_LIB  = ;
   local new_LINK = ;
   if $($(1)__TargetType) = lib { new_LIB  = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(_LIB) ] ; }
-  else if $($(1)__TargetType) in exe dll { new_LINK = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(_LINK) ] ; }
-  local new_optCpp = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__PRE_OPT) $($(1)__CPP_OPT) ] ;
+  else if $($(1)__TargetType) in exe dll { new_LINK = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(_LINK) $($(1)__LINK_LIBS) ] ; }
+  local new_optCpp = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__PRE_OPT) $($(1)__CPP_OPT) $(_CPP_BASE_INCLUDES) ] ;
   local new_optAsm = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__ASM_OPT) ] ;
-  local new_optC = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__PRE_OPT) $($(1)__C_OPT) ] ;
+  local new_optC = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__PRE_OPT) $($(1)__C_OPT) $(_C_BASE_INCLUDES) ] ;
   local new_optLink = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $($(1)__LINK_OPT) ] ;
   local new_gopt = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(GlobalCPPopt) ] ;
   local new_lopt = ;

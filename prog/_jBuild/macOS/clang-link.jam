@@ -98,8 +98,11 @@ rule ProcessLinkTarget
     }
 
     if $(Config) = rel && $(CopyTo) {
+      local target_exe_name = $(Target:D=) ;
+      # add proper postfix when copying exe so we can create universal binary
+      if $(MacRelPath) != "" { target_exe_name = $(Target:D=)-$(PlatformArch) ; }
       $(Target)__POSTLINK_CMD += "
- " copyfile $(OutDir)/$(Target) $(CopyTo)/$(Target:D=).orig ;
+ " copyfile $(OutDir)/$(Target) $(CopyTo)/$(target_exe_name).orig ;
     } else if $(Config) = rel {
       $(Target)__LINK += -Wl,-S ;
     }
