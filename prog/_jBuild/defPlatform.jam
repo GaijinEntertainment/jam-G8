@@ -1,3 +1,9 @@
+if $(__DEFAULT_PLATFORM_JAM_INCLUDED) { return ; }
+__DEFAULT_PLATFORM_JAM_INCLUDED = yes ;
+
+NOCARE $(Root)/prog/platform.jam ;
+include $(Root)/prog/platform.jam ;
+
 switch $(OS) {
   case NT     : Platform  ?= windows ;
   case MACOSX : Platform  ?= macOS ;
@@ -19,5 +25,5 @@ if $(Platform) in windows macOS linux {
 ComSpec ?= $(COMSPEC) ;
 
 for t in $(JAMTARGETS) { # process target-keywords (with special meaning)
-  if $(t) in mkdevtools clean this nocare depjam cache clean clean_all { Depends $(t) : all ; }
+  if $(t) in mkdevtools clean this cache clean clean_all { Depends $(t) : all ; }
 }

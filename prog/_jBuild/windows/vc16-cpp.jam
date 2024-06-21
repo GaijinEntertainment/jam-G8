@@ -108,7 +108,6 @@ rule ProcessCompileTarget
                     /wd5245 # Some functions' overloads aren't used and the compiler warns to remove then
                     /wd5246 # the MSC has the CWG defect #1270 and offers the old initialization behaviour, https://stackoverflow.com/a/70127399
                     /wd5264 # falsely identifies static const variables unused
-                    /wd5267 # Same as -Wno-deprecated-declarations in clang-sets.jam
     ;
     _SUPPRESS_OPT += /permissive- ;
   }
@@ -143,7 +142,7 @@ rule ProcessCompileTarget
   }
   if $(PlatformArch) = x86 {
     if $(Config) in rel irel { _CONFIG_OPT += /arch:SSE2 ; } else { _CONFIG_OPT += /arch:IA32 ; }
-    _SUPPRESS_OPT = [ StripStrings $(_SUPPRESS_OPT) : /wd4334 /wd5267 ] ;
+    _SUPPRESS_OPT = [ StripStrings $(_SUPPRESS_OPT) : /wd4334 ] ;
   }
   if $(BuildDagorEngineIndependentCode) = yes {
     _CONFIG_OPT = $(_GlobCopt_Optimize) ;

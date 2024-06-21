@@ -120,14 +120,6 @@ rule CheckParams
   }
 }
 
-# get absolute path from location-based path (allows @ prefix to denote already absolude path)
-rule LocationBasedToAbsPath
-{
-  local split = [ MATCH @(.+) : $(1) ] ;
-  if $(split) { return $(split) ; }
-  return $(Root)/$(Location)/$(1) ;
-}
-
 # setup build environment and _Output variables
 rule SetupBuildEnv
 {
@@ -311,6 +303,19 @@ actions quietly build_jam
   call $(JAM_EXE) -sRoot=$(Root) -f$(2)
 }
 
+# process opt and pre_opt on sources
+rule ProcessSourceOptions src
+{
+  for s in $(src) {
+    local src_opt = ; on $(s) src_opt = $(opt) ;
+    local src_pre_opt = ; on $(s) src_pre_opt = $(pre_opt) ;
+    opt on $(s) = ;
+    pre_opt on $(s) = ;
+    opt on $(Location)/$(s) = $(src_opt) ;
+    pre_opt on $(Location)/$(s) = $(src_pre_opt) ;
+  }
+}
+
 # process target variables and setup internal data
 rule ProcessTargetVariables
 {
@@ -342,7 +347,7 @@ rule ProcessTargetVariables
     CopyFileRule = ;
   } else if $(TargetType) != util {
     local prev_ProjectUseQuirrel = ;
-    if $(UseQuirrel)
+    if $(UseQuirrel) && $(UseQuirrel) != none
     {
       if $(TargetType) = lib && $(MultiTarget) { Exit UseQuirrel is not supported for TargetType=$(TargetType) and MultiTarget ; }
 
@@ -385,6 +390,7 @@ rule ProcessTargetVariables
         for t in $(MultiTarget) {
           local tgt = [ MangleTargetName $(t) ] ;
 
+          ProcessSourceOptions $(Sources($(t))) ;
           $(tgt)__Sources = $(Sources($(t))) ;
           Sources($(t)) = ;
 
@@ -394,6 +400,7 @@ rule ProcessTargetVariables
         }
       } else {
         for t in $(MultiTarget) {
+          ProcessSourceOptions $(Sources($(t))) ;
           $(t)__Sources = $(Sources($(t))) ;
           Sources($(t)) = ;
 
@@ -416,6 +423,7 @@ rule ProcessTargetVariables
         $(Target)__CodeName = $(TargetCodeName) ;
       }
 
+      ProcessSourceOptions $(Sources) ;
       $(Target)__Sources = $(Sources) ;
       Sources = ;
 
@@ -1127,6 +1135,12 @@ rule CompileJamVarCpp
 
     local action_name = $($(2)_action) ;
     action_name ?= echo_var_to_cpp ;
+    if $(action_name) = echo_var_lines_to_cpp {
+      var on $(dest_cpp) = ;
+      local var_lines = echo $($(2)[1])>$(dest_cpp) ;
+      for ln in $($(2)[2-]) { var_lines += $(NEWLINE_STR_)"  echo" $(ln)>>$(dest_cpp) ; }
+      echo_var_lines on $(dest_cpp) = $(var_lines) ;
+    }
     Depends $(dest_cpp) : $($(action_name)_DEPS) ;
     $(action_name) $(dest_cpp) : $(2) ;
 
@@ -1198,7 +1212,7 @@ actions quietly exec_scripted_command
 }
 
 # rule how to compile generated _das_AOT.cpp in batch to .obj
-#   params: ( _das_AOT_files : target : tmp_output_dir )
+#   params: ( _das_AOT_files : target : tmp_output_dir : batch_size )
 rule AotCompileBatchedGeneratedDAS
 {
   local base32_alphabet = a b c d e f g h i j k l m n o p q r s t u v w x y z 2 3 4 5 6 7 ;
@@ -1209,6 +1223,7 @@ rule AotCompileBatchedGeneratedDAS
   local digits1 = $(base32_alphabet) ;
   local das_list_jamfile = $(3)/_das/$(2:B)_list.jam ;
   local das_list_changed = no ;
+  local das_batch_size = $(4) ;
 
   NOCARE $(das_list_jamfile) ;
   include $(das_list_jamfile) ;
@@ -1226,7 +1241,7 @@ rule AotCompileBatchedGeneratedDAS
   list = $(list[2-]) ;
   while $(list) {
     local dest_cpp = $(base_dest_cpp)$(digits0[1])$(digits1[1]).cpp ;
-    local batch_list = $(list[1-10]) ;
+    local batch_list = $(list[1-$(das_batch_size)]) ;
     local dest_obj = $(dest_cpp:S=$(_OBJ_SUFFIX)) ;
 
     Depends $(dest_cpp) : $(batch_list) ;
@@ -1250,7 +1265,9 @@ rule AotCompileBatchedGeneratedDAS
     compile_cpp $(dest_obj) : $(dest_cpp) ;
 
     obj_list += _das/$(dest_obj:D=) ;
-    list = $(list[11-]) ;
+    # next two rows work like ($(das_batch_size) + 1)-
+    list = $(list[$(das_batch_size)-]) ;
+    list = $(list[2-]) ;
     if $(digits1[2-]) {
       digits1 = $(digits1[2-]) ;
     } else {
@@ -1481,6 +1498,14 @@ actions together quietly echo_var_to_cpp
   echo $(var) >$(1)
 }
 
+# write var contents (each string on new line) to output file and reference copy of var to .jam
+actions together quietly echo_var_lines_to_cpp
+{
+#async
+  echo $(var_name) = $(ref_var) ; >$(1:S=.jam)
+  $(echo_var_lines)
+}
+
 #
 # JamBuild core
 #
@@ -1493,14 +1518,9 @@ if $(CheckOnly) = yes { Echo --- fast CheckOnly build --- ; }
 # check params and setup build-env
 CheckParams ;
 SetupBuildEnv ;
-local jam_path = $(JAMFILESRC) ;
 
 # create list of targets to build
 if ! $(GLOBAL_BuildDevtool) { ProcessTargetVariables ; }
-
-if $(GLOBAL_DependOnJam) { for t in $(Target) { $(t)_jam = $(jam_path) $(DependOnJams) ; } }
-jam_path = ;
-DependOnJams = ;
 
 # if root target is util, mark it as NOTFILE/ALWAYS
 if $(TargetType) = util || $(TargetType) = copy {
@@ -1551,7 +1571,7 @@ for t_lev in 1 2 3 4 5 6 7 8 {
           include $(t_jamfile) ;
 
           if $($(cur_target)__RootTargetType) = dll && $(Platform) in linux {
-            if $(TargetType) = lib { Target = $(Target:S=~dll$(Target:S)) ; }
+            if $(TargetType) = lib && $(KernelLinkage) != dynamic { Target = $(Target:S=~dll$(Target:S)) ; }
             $(Target)__RootTargetType = dll ;
           }
           CheckParams ;
@@ -1568,8 +1588,6 @@ for t_lev in 1 2 3 4 5 6 7 8 {
 
           # ...and store its targets
           $(t_jamfile)_Target = $(Target) ;
-          if $(GLOBAL_DependOnJam) { for t in $(Target) { $(t)_jam = $(t_jamfile) $(DependOnJams) ; } }
-          DependOnJams = ;
         }
       } else {
         # if jamfile was already includes, just setup dependency
@@ -1778,7 +1796,7 @@ rule DebugDigestDiff field : old : new : file
   switch $(DbgDigest)
   {
     case stop : exit ;
-    case once : DbgDigest = ;
+    case once : DbgDigest = once_fired ;
   }
 }
 
@@ -1787,6 +1805,7 @@ rule ProcessTargetDigest # target : das_src
 {
   local target_file = $($(1)__OutDir)/$(1) ;
   local tmp_dir = $($(1)__TmpDir) ;
+  local loc = $($(1)__Location) ;
   local digest = $(tmp_dir)/$(1:D=:G=).digest ;
   local new_src = $($(1)__Sources) ;
   if $($(1)__UsePCH) = yes { new_src += $($(1)__PrecompiledName).cpp ; }
@@ -1805,8 +1824,8 @@ rule ProcessTargetDigest # target : das_src
   for src in $(sources) {
     local lopt = ;
     local lpre_opt = ;
-    on $(src) lpre_opt = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(pre_opt) ] ;
-    on $(src) lopt = :$(lpre_opt) [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(opt) ] ;
+    on $(loc)/$(src) lpre_opt = [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(pre_opt) ] ;
+    on $(loc)/$(src) lopt = :$(lpre_opt) [ ReplaceRootPrefixForKnownOptionAndStripHarmless $(opt) ] ;
     new_lopt += $(src)?$(lopt:J=$) ;
   }
 
@@ -1833,7 +1852,9 @@ rule ProcessTargetDigest # target : das_src
   if ! $(digest_src) && ! $(digest_optCpp) && ! $(digest_optAsm) && ! $(digest_optC) &&
      ! $(digest_optLink) && ! $(digest_gopt) && ! $(digest_lopt) {
     # digest is missing, just force to create actual one
-    echo note: rebuild $(1) due to missing digest ;
+    if $(DbgDigest) && ! $(DbgDigest) in once min {
+      echo note: rebuild $(1) due to missing digest ;
+    }
     ALWAYS $(target_file) ;
     ALWAYS $(digest) ;
     for s in $(new_src) { ALWAYS $(tmp_dir)/$(s:S=$(_OBJ_SUFFIX)) ; }
@@ -1870,11 +1891,12 @@ rule ProcessTargetDigest # target : das_src
     MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .c .m ;
   }
   if $(digest_optAsm) != $(new_optAsm) {
-    DebugDigestDiff ASMopt : $(digest_optASm) : $(new_optAsm) : $(digest) ;
+    DebugDigestDiff ASMopt : $(digest_optAsm) : $(new_optAsm) : $(digest) ;
     recompile_reasons += ASMopt ;
     MarkSourcesChanged $(new_src) : $(tmp_dir) : recompile_list : .asm .s .S .nas .s@nasm .nasm .masm ;
   }
   if $(digest_lopt) != $(new_lopt) {
+    DebugDigestDiff "opt|pre_opt" : $(digest_lopt) : $(new_lopt) : $(digest) ;
     recompile_reasons += 'opt/pre_opt\ on' ;
     for l in $(new_lopt) {
       if $(l) in $(digest_lopt) { continue ; }
@@ -1895,6 +1917,7 @@ rule ProcessTargetDigest # target : das_src
       if ! $(src_name) in $(recompile_list) { recompile_list += $(src_name) ; }
     }
   }
+  if $(DbgDigest) = once_fired { DbgDigest = ; }
 
   # mark targets changed if changes in digest require that (and report this for clarity)
   if $(recompile_list) {
@@ -2028,7 +2051,9 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
       }
     }
     if $(das_sources) {
-      objs += [ AotCompileBatchedGeneratedDAS $(das_sources) : $(target) : $(tmp_dir) ] ;
+      local batch_size = $(AotBatchSize) ;
+      batch_size ?= 10 ;
+      objs += [ AotCompileBatchedGeneratedDAS $(das_sources) : $(target) : $(tmp_dir) : $(batch_size) ] ;
     }
 
     ProcessTargetDigest $(target) : $(das_sources) ;
@@ -2037,10 +2062,6 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
       LibTarget $(out_dir)/$(target) : $(tmp_dir)/$(objs) : $(target) ;
     } else if $($(target)__TargetType) in $(_FinalBinTargetTypes) {
       LinkTarget $(out_dir)/$(target) : $(tmp_dir)/$(objs) : $(target) : $($(target)__CopyTo) ;
-    }
-    if $(GLOBAL_DependOnJam) {
-      if ! $($(target)_jam) { Exit $(target)_jam not set! ; }
-      Depends $(out_dir)/$(target) : $($(target)_jam) $(Root)/prog/_jBuild/$(_BuildEnv)-link.jam ;
     }
 
     for src in $(sources) {
@@ -2051,14 +2072,11 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
       }
 
       local tgt_opt = ; on $(target) tgt_opt = $(opt) ;
-      local src_opt = ; on $(src)    src_opt = $(opt) ;
+      local src_opt = ; on $(location)/$(src) src_opt = $(opt) ;
       local tgt_pre_opt = ; on $(target) tgt_pre_opt = $(pre_opt) ;
-      local src_pre_opt = ; on $(src)    src_pre_opt = $(pre_opt) ;
+      local src_pre_opt = ; on $(location)/$(src) src_pre_opt = $(pre_opt) ;
       opt on $(src) = $(tgt_opt) $(src_opt) ;
       pre_opt on $(src) = $(src_pre_opt) $(tgt_pre_opt) ;
-      if $(GLOBAL_DependOnJam) {
-        Depends $(obj_path) : $($(target)_jam) $(Root)/prog/_jBuild/$(_BuildEnv)-sets.jam $(Root)/prog/_jBuild/$(_BuildEnv)-cpp.jam ;
-      }
 
       on $(src) switch $(src:S) {
         case .cpp :
@@ -2100,6 +2118,7 @@ for t_lev in 0 1 2 3 4 5 6 7 8 {
           echo skip unknown source type $(src:S) (for $(src)) ;
       }
       opt on $(src) = ;
+      pre_opt on $(src) = ;
     }
 
     if $(GLOBAL_CleanObj)

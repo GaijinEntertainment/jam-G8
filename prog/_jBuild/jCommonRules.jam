@@ -3,6 +3,11 @@ if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
 else if $(OS) in MACOSX { PYTHON_EXE = python ; }
 else if $(OS) in LINUX { PYTHON_EXE = python ; }
 
+if $(OS) in MACOSX && $(PYTHON_EXE) = python3 && ! [ GLOB /usr/bin : $(PYTHON_EXE) ] {
+  echo warning: $(PYTHON_EXE) not found, trying to use python ;
+  PYTHON_EXE = python ;
+}
+
 actions together quietly updated null_action
 {
 }
@@ -81,16 +86,19 @@ rule MakePathListAbsolute prefix : suffixList
 
 rule BuildValidJamString
 {
-  local spec_sym = ";=\"{}#():\\" ;
+  if $(1[2-]) { exit BuildValidJamString accepts single-string list only, use :J=\ if needed ; }
+  if $(1) in ":" "{" "}" "(" ")" "#" "=" ";" "||" "&&" { return \\$(1) ; }
+  local spec_sym = "\#\"\\\ " ;
   local match_str = ([^$(spec_sym)]*)([$(spec_sym)])(.*) ;
 
-  local split = [ MATCH $(match_str) : $(1:J=\ ) ] ;
-  if ! $(split) { return $(1:J=\ ) ; }
+  local split = [ MATCH $(match_str) : $(1) ] ;
+  if ! $(split) { return $(1) ; }
 
   local result = $(split[1]) ;
   while $(split[2]) {
     result += \\$(split[2]) ;
-    split = [ MATCH $(match_str) : $(split[3]) ] ;
+    local s2 = [ MATCH $(match_str) : $(split[3]) ] ;
+    if $(s2) { split = $(s2) ; } else { split = $(split[3]) ; }
     result += $(split[1]) ;
   }
   return $(result:J) ;
@@ -139,6 +147,14 @@ if $(OS) = NT {
     $(post_copy_cmd)
     if not exist $(1) set errorlevel=13
   }
+}
+
+# get absolute path from location-based path (allows @ prefix to denote already absolude path)
+rule LocationBasedToAbsPath
+{
+  local split = [ MATCH @(.+) : $(1) ] ;
+  if $(split) { return $(split) ; }
+  return $(Root)/$(Location)/$(1) ;
 }
 
 rule BundleCopyFile

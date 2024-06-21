@@ -6,9 +6,6 @@ if ! $(__DEFAULTS_INCLUDED) {
 
   Root      ?= ./ ;
 
-  NOCARE $(Root)/prog/platform.jam ;
-  include $(Root)/prog/platform.jam ;
-
   include $(Root)/prog/_jBuild/defPlatform.jam ;
 
   PlatformSpec_$(Platform) ?= $(PlatformSpec_$(Platform)_$(PlatformArch)) ;
@@ -22,18 +19,11 @@ if ! $(__DEFAULTS_INCLUDED) {
   NoMemBaseInclude ?= no ;
 
   PlatformSpec ?= $(PlatformSpec_$(Platform)) ;
-  if $(PlatformSpec) = vc17
-  {
-    VCUpdateVer ?= 17.9.5 ;
-  } else if $(PlatformSpec) = vc16
-  {
-    VCUpdateVer ?= 16.11.34 ;
-  } else if $(PlatformSpec) = vc15
-  {
-    VCUpdateVer ?= 15.9.5 ;
-  } else
-  {
-    VCUpdateVer ?= 3 ;
+  switch $(PlatformSpec) {
+    case vc17 : VCUpdateVer ?= 17.9.5 ;
+    case vc16 : VCUpdateVer ?= 16.11.34 ;
+    case vc15 : VCUpdateVer ?= 15.9.5 ;
+    case * :    VCUpdateVer ?= 3 ;
   }
 
   if $(PlatformSpec) = clang {
@@ -63,12 +53,12 @@ if ! $(__DEFAULTS_INCLUDED) {
   if $(Config) = dbg {
     CheckedContainers ?= yes ;
     StackProtection ?= yes ;
-  } else if $(Config) = rel {
+  } else if $(Config) in rel irel {
     CheckedContainers = no ;
     StackProtection ?= no ;
   } else {
     CheckedContainers ?= no ;
-    StackProtection ?= no ;
+    StackProtection ?= yes ;
   }
   if $(Sanitize) = address {
     StackProtection = no ;
@@ -324,7 +314,6 @@ if ! $(__DEFAULTS_INCLUDED) {
   SetupOutputDir ;
 
   if ( clean in $(JAMTARGETS) ) || ( this in $(JAMTARGETS) ) { GLOBAL_OmitDependencies = 1 ; }
-  if depjam in $(JAMTARGETS) { GLOBAL_DependOnJam = 1 ; }
   if cache in $(JAMTARGETS) { GLOBAL_CacheDryRun = 1 ; }
   if clean in $(JAMTARGETS) { GLOBAL_CleanObj = clean ; }
   else if clean_all in $(JAMTARGETS) { GLOBAL_CleanObj = clean_all ; }

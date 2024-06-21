@@ -1,11 +1,17 @@
 #  Setup for Clang-CL C/C++ compiler for Windows (to be included from jBuild.jam)
 _OBJ_SUFFIX  = .obj ;
 
-_VC_DIR      = $(_DEVTOOL)/vc2019 ;
-VCUpdateVer  = 16.11.34 ;
-_CLANG_DIR   = $(_DEVTOOL)/LLVM-$(CLangVer) ;
+switch $(CLangVer)
+{
+  case 15.* : _VC_DIR = $(_DEVTOOL)/vc2019_16.11.34 ; _MSC_VER = 19.29.30154 ;
+  case 16.* : _VC_DIR = $(_DEVTOOL)/vc2022_17.9.5 ;   _MSC_VER = 19.39.33523 ;
+  case *    : exit Unknown CLangVer $(CLangVer) ;
+}
+_CLANG_DIR = $(_DEVTOOL)/LLVM-$(CLangVer) ;
+
 if ! [ GLOB $(_CLANG_DIR) : * ] { exit FATAL\: \"$(_CLANG_DIR)\" not found! ; }
-if $(VCUpdateVer) { _VC_DIR = $(_VC_DIR)_$(VCUpdateVer) ; }
+if ! [ GLOB $(_VC_DIR)    : * ] { exit FATAL\: \"$(_VC_DIR)\" not found! ; }
+
 _VC_CRT_TYPE = -MT ;
 if $(PlatformArch) = x86_64 { _WIN_SDK_TARGET_SUFFIX = x64 ; }
 if $(PlatformArch) = arm64 { _WIN_SDK_TARGET_SUFFIX = arm64 ; }
@@ -15,7 +21,7 @@ _VC_DIR_BIN = $(_VC_DIR)/bin/Hostx64/$(_WIN_SDK_TARGET_SUFFIX) ;
 if ! [ GLOB $(_DEVTOOL)/nasm : * ] { exit FATAL\: \"$(_DEVTOOL)/nasm\" not found!  Please, update DEVTOOLS ; }
 
 local _DEF_C_CMDLINE =
-  -fms-compatibility-version=19.29.30038.1
+  -fms-compatibility-version=$(_MSC_VER)
   -X /D_TARGET_PC=1 -D_TARGET_PC_WIN=1 /Dasm=__asm /DWIN32_LEAN_AND_MEAN= /D_USE_MATH_DEFINES
   /DNOMINMAX
   -D_TARGET_SIMD_SSE=$(SSEVersion) -D_ALLOW_KEYWORD_MACROS=

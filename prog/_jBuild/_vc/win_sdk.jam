@@ -37,6 +37,7 @@ if $(_WIN_SDK_TARGET_SUFFIX) {
 actions together quietly compile_pch_sync
 {
   $(VC_START_SHOW_INCLUDES_FILTER)
+  echo PCH: $(pch:D=)
   set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
   del $(pch)
   call_filtered $(_CPP_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) /Fp$(pch) -showIncludes #\(-Fo$(1) $(2:G=))\#

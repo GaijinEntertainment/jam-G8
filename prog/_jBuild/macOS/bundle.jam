@@ -37,6 +37,7 @@ actions together quietly convert_plist_file
 actions together quietly convert_strings_file
 {
   echo * converting loc strings: $(1)
+  mkdir $(1:D)
   call plutil -convert binary1 -o $(1) $(2)
   if not exist $(1) set errorlevel=13
 }
