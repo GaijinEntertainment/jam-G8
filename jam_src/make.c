@@ -160,7 +160,7 @@ make(
 	    status |= make1( bindtarget( targets[i] ) );
 
 	t2 = clock();
-	if (t2-t0 > CLOCKS_PER_SEC/10)
+	if (t2-t0 > CLOCKS_PER_SEC/10 && DEBUG_MAKE)
 	  printf("\nbuild time: %.1f sec (graph), %.1f sec (actions), using %d job(s)\n",
 	    ((double)(t1-t0))/CLOCKS_PER_SEC, ((double)(t2-t1))/CLOCKS_PER_SEC, globs.jobs);
 	return status;
