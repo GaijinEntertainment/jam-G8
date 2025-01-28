@@ -63,10 +63,6 @@
 # include "headers.h"
 # include "command.h"
 
-#ifdef JAM2VS
-#	include <jam2vs.h>
-#endif //JAM2VS
-
 # ifndef max
 # define max( a,b ) ((a)>(b)?(a):(b))
 # endif
@@ -247,10 +243,6 @@ make0(
 	/* 
 	 * Pause for a little progress reporting 
 	 */
-
-#ifdef JAM2VS
-  add_include(t->name);
-#endif //JAM2VS
 
 	if( DEBUG_MAKEPROG )
 	{
