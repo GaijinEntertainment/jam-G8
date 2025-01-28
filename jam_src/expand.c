@@ -74,7 +74,7 @@ var_expand(
 	LOL		*lol,
 	int		cancopyin )
 {
-	char out_buf[ MAXSYM ];
+	char out_buf[ MAXSYM * 24 ];
 	char *out = out_buf;
 	const char *inp = in;
 	char *ov;		/* for temp copy of variable in outbuf */
