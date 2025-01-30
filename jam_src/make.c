@@ -64,10 +64,6 @@
 # include "command.h"
 # include "buildstats.h"
 
-#ifdef JAM2VS
-#	include <jam2vs.h>
-#endif //JAM2VS
-
 # ifndef max
 # define max( a,b ) ((a)>(b)?(a):(b))
 # endif
@@ -167,7 +163,7 @@ make(
 	bstat_save();
 
 	t2 = clock();
-	if (t2-t0 > CLOCKS_PER_SEC/10)
+	if (t2-t0 > CLOCKS_PER_SEC/10 && DEBUG_MAKE)
 	  printf("\nbuild time: %.1f sec (graph), %.1f sec (actions), using %d job(s)\n",
 	    ((double)(t1-t0))/CLOCKS_PER_SEC, ((double)(t2-t1))/CLOCKS_PER_SEC, globs.jobs);
 	return status;
@@ -279,10 +275,6 @@ make0(
 	/* 
 	 * Pause for a little progress reporting 
 	 */
-
-#ifdef JAM2VS
-  add_include(t->name);
-#endif //JAM2VS
 
 	if( DEBUG_MAKEPROG )
 	{

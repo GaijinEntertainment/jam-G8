@@ -8,7 +8,7 @@ local _DEF_COM_CMDLINE =
   -MMD -Wno-trigraphs -Wno-multichar -Wformat -Wno-format-extra-args -Wno-ignored-attributes
   -Wno-deprecated -Wno-format-truncation -Wno-nonnull
   -ffunction-sections -fdata-sections -fno-omit-frame-pointer
-  -ffast-math -ffinite-math-only -minline-all-stringops
+  -ffast-math -ffinite-math-only -mno-recip -minline-all-stringops
   -Wuninitialized -Werror=uninitialized
   -Wno-deprecated-declarations # e.g. auto_ptr<>
   -Wno-maybe-uninitialized # EASTL's string SSO seems to cause this
@@ -26,7 +26,8 @@ local _DEF_COM_CMDLINE =
   -Di_strlen=(int)strlen
   -D__STDC_CONSTANT_MACROS
 ;
-if $(DriverLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB=1 ; }
+if $(KernelLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB=1 ; }
+if $(PlatformArch) = e2k { _DEF_COM_CMDLINE += -D_XM_NO_INTRINSICS_ -w2620 -w2189 -w826 -Wno-unused-parameter ; }
 
 local _DEF_C_CMDLINE = -std=c99 ;
 local _DEF_CPP_CMDLINE = -std=c++$(CPPStd) -fconserve-space -Wno-invalid-offsetof ;

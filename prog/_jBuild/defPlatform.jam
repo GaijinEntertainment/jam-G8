@@ -1,10 +1,22 @@
-switch $(OS) {
-  case NT     : Platform  ?= win32 ;
-  case MACOSX : Platform  ?= macosx ;
-  case LINUX  : Platform  ?= linux64 ;
-}
+if $(__DEFAULT_PLATFORM_JAM_INCLUDED) { return ; }
+__DEFAULT_PLATFORM_JAM_INCLUDED = yes ;
 
-if $(Platform) in win32 win64 macosx linux64 {
+NOCARE $(Root)/prog/platform.jam ;
+include $(Root)/prog/platform.jam ;
+
+switch $(OS) {
+  case NT     : Platform  ?= windows ;
+  case MACOSX : Platform  ?= macOS ;
+  case LINUX  : Platform  ?= linux ;
+}
+PlatformArch_windows ?= x86 ;
+PlatformArch_linux ?= x86_64 ;
+PlatformArch_macOS ?= x86_64 ;
+
+PlatformArch ?= $(PlatformArch_$(Platform)) ;
+PlatformArch ?= x86_64 ;
+
+if $(Platform) in windows macOS linux {
   PlatformDataFormatCode ?= PC ;
 } else {
   PlatformDataFormatCode ?= PC ; # unknown, let it be PC format
@@ -13,5 +25,5 @@ if $(Platform) in win32 win64 macosx linux64 {
 ComSpec ?= $(COMSPEC) ;
 
 for t in $(JAMTARGETS) { # process target-keywords (with special meaning)
-  if $(t) in mkdevtools clean this nocare depjam cache clean clean_all { Depends $(t) : all ; }
+  if $(t) in mkdevtools clean this cache clean clean_all { Depends $(t) : all ; }
 }

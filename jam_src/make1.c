@@ -62,10 +62,6 @@
 # include "command.h"
 # include "execcmd.h"
 
-#ifdef JAM2VS
-#	include <jam2vs.h>
-#endif //JAM2VS
-
 static void make1a( TARGET *t, TARGET *parent );
 static void make1b( TARGET *t );
 static void make1c( TARGET *t, int targetIndex);
@@ -269,10 +265,6 @@ static void
 make1c( TARGET *t, int targetIndex )
 {
 	CMD	*cmd = (CMD *)t->cmds;
-#ifdef JAM2VS
-	TARGETS	*c1;
-	TARGETS	*c2;
-#endif //JAM2VS
 	/* If there are (more) commands to run to build this target */
 	/* (and we haven't hit an error running earlier comands) we */
 	/* launch the command with execcmd(). */
@@ -293,22 +285,6 @@ make1c( TARGET *t, int targetIndex )
 
 	    if( DEBUG_EXEC )
 		printf( "%s\n", cmd->buf );
-
-#ifdef JAM2VS
-		vsout( cmd->buf );
-
-		for( c1 = t->depends; c1; c1 = c1->next )
-		{
-			if (c1->target->includes)
-			{
-				for( c2 = c1->target->includes->depends; c2; c2 = c2->next )
-				{
-					if (c2->target->binding == T_BIND_EXISTS)
-						add_include(c2->target->boundname);
-				}
-			}
-		}
-#endif //JAM2VS
 
 	    if( globs.cmdout )
 		fprintf( globs.cmdout, "%s", cmd->buf );

@@ -74,30 +74,52 @@ rule ProcessCompileTarget
     #   C4388  signed/unsigned mismatch
     #   C4458   declaration of 'parameter' hides class member
     #   C4774  '<function>' : format string expected in argument <position> is not a string literal
+    #   C5039  pointer or reference to potentially throwing function passed to extern C function
+    #   C5045  Compiler will insert Spectre mitigation for memory load if /Qspectre switch specified
+    #   C4623  default constructor was implicitly defined as deleted
+    #   C5038  (some) data member will be initialized after (another) data member
+    #   C4768  __declspec attributes before linkage specification are ignored
+    #   C5052  Keyword 'char8_t' was introduced in C++20 and requires use of the '/std:c++latest' command-line option
+    #   C5204 non-virtual destructor for class with virtual functions
+    #   C4577 'noexcept' used with no exception handling mode specified
+    #   C5220 a non-static data member with a volatile qualified type no longer implies that compiler generated copy/move constructors and copy/move assignment operators are non trivial
+    #   C5219 implicit conversion. That is GOOD warning, we would rather fix it everywhere!
+    #   C5245 'function': unreferenced function with internal linkage has been removed
+    #   C5246 'member': the initialization of a subobject should be wrapped in braces
+    #   C5264 'variable-name': 'const' variable is not used
 
-    _SUPPRESS_OPT = -Wall -WX /wd4514 /wd4061 /wd4820 /wd4668 /wd4619 
-                    /wd4365 /wd4127 /wd4302 /wd4242 /wd4244 /wd4265 
-                    /wd4101 /wd4201 /wd4625 /wd4626 /wd4800 /wd4018 
+    _SUPPRESS_OPT = -Wall -WX /wd4514 /wd4061 /wd4820 /wd4668 /wd4619
+                    /wd4365 /wd4127 /wd4302 /wd4242 /wd4244 /wd4265
+                    /wd4101 /wd4201 /wd4625 /wd4626 /wd4800 /wd4018
                     /wd4710 /wd4245 /wd4291 /wd4389 /wd4200 /wd4255
                     /wd4711 /wd4062 /wd4355 /wd4640 /wd4305 /wd4324
-                    /wd4511 /wd4512 /wd4305 /wd4738 /wd4996 /wd4005 
+                    /wd4511 /wd4512 /wd4305 /wd4738 /wd4996 /wd4005
                     /wd4740 /wd4702 /wd4826 /wd4503 /wd4748 /wd4987
                     /wd4574 /wd4554 /wd4471 /wd4350 /wd4370 /wd4371
                     /wd4316 /wd4388 /wd4091 /wd5026 /wd5027 /wd4774
-                    /wd4312 /wd4302 /wd4334
+                    /wd4312 /wd4302 /wd4334 /wd5220 /wd5219
                     /wd4464 /wd4463 /wd4589 /wd4595 /wd4435 /wd4319 /wd4311 /wd4267 /wd4477 /wd4777
-                    /wd4548
+                    /wd4548 /wd5039 /wd5045 /wd4623 /wd5038 /wd4768
                     /wd4456 # very convenient for casting to the same var within one function (event handler)
-                    #/wd444 /wd279 /wd981 /wd383 /wd310 /wd174 /wd111 /wd271 /wd4714 ;
+                    #/wd444 /wd279 /wd981 /wd383 /wd310 /wd174 /wd111 /wd271 /wd4714
+                    /wd5052
+                    /wd5204 /wd4577
+                    /wd4866 # warning C4866: compiler may not enforce left-to-right evaluation order for call to operator_name
+                    /wd5245 # Some functions' overloads aren't used and the compiler warns to remove then
+                    /wd5246 # the MSC has the CWG defect #1270 and offers the old initialization behaviour, https://stackoverflow.com/a/70127399
+                    /wd5264 # falsely identifies static const variables unused
     ;
+    _SUPPRESS_OPT += /permissive- ;
   }
   else
   {
     _SUPPRESS_OPT = -W3 /wd4244 /wd4101 /wd4800 /wd4018 /wd4291 /wd4200 /wd4355 /wd4305
                     /wd4996 /wd4005 /wd4740 /wd4748 /wd4324 /wd4503 /wd4574 /wd4554 /wd4316
-                    /wd4388 /wd4091 /wd5026 /wd5027 /wd4334 /wd4267
-                    /wd4595 /wd4838 /wd4312 /wd4302 /wd4311 /wd4319 /wd4477
+                    /wd4388 /wd4091 /wd5026 /wd5027 /wd4334
+                    /wd4595 /wd4838 /wd4312 /wd4302 /wd4311 /wd4319 /wd4477 /wd5039 /wd5045 /wd4623 /wd5038 /wd4768
+                    /wd5204 /wd4577 /wd4267
                     /wd4723 #warning C4723: potential divide by 0
+                    /wd4866 # warning C4866: compiler may not enforce left-to-right evaluation order for call to operator_name
                     #warning C4263: 'void B::f(int)' : member function does not override any base class virtual member function
                     #/w14263
                     #warning C4264: 'void A::f(void)' : no override available for virtual member function from base 'A'; function is hidden
@@ -115,14 +137,20 @@ rule ProcessCompileTarget
       _CONFIG_OPT = /Ox /GF /Gy /Gw /Oi /Ot /Oy- -DDAGOR_DBGLEVEL=-1 -DNDEBUG=1 -D_SECURE_SCL=0 ;
     case dbg :
       _CONFIG_OPT = /Od /RTC1 -DDAGOR_DBGLEVEL=2 ;
-    case analyze :
-      _CONFIG_OPT = /Ox /GF /Gy /Gw /Oi /Ot -DDAGOR_DBGLEVEL=1 /analyze ;
-    case prefast :
-      _CONFIG_OPT = /Ox /GF /Gy /Gw /Oi /Ot -DDAGOR_DBGLEVEL=1 ;
     case * :
       _CONFIG_OPT = ;
   }
-  if $(CheckOnly) != yes { _CONFIG_OPT += /Zi ; }
+  if $(PlatformArch) = x86 {
+    if $(Config) in rel irel { _CONFIG_OPT += /arch:SSE2 ; } else { _CONFIG_OPT += /arch:IA32 ; }
+    _SUPPRESS_OPT = [ StripStrings $(_SUPPRESS_OPT) : /wd4334 ] ;
+  }
+  if $(BuildDagorEngineIndependentCode) = yes {
+    _CONFIG_OPT = $(_GlobCopt_Optimize) ;
+    if $(Config) in rel irel { _CONFIG_OPT += -DNDEBUG=1 -D_SECURE_SCL=0 ; }
+  }
+
+  if $(MSVectorcall) = yes { _CONFIG_OPT += /Gv ; }
+  if $(BuildDagorEngineIndependentCode) != yes && $(CheckOnly) != yes { _CONFIG_OPT += /Zi ; }
   if $(StackProtection) = no { _CONFIG_OPT += /GS- ; }
 
   #optimize compilation ~5%
@@ -131,7 +159,7 @@ rule ProcessCompileTarget
   if $(Exceptions) != yes {
     _CONFIG_OPT += -D_HAS_EXCEPTIONS=0 -DEA_COMPILER_NO_NOEXCEPT ;
   } else {
-    if ($CatchSEH) != yes {
+    if $(CatchSEH) != yes {
       _CONFIG_OPT += /EHsc -DDAGOR_EXCEPTIONS_ENABLED=1 ;
     } else {
       _CONFIG_OPT += /EHac -DDAGOR_EXCEPTIONS_ENABLED=1 ;
@@ -148,10 +176,8 @@ rule ProcessCompileTarget
     _CONFIG_OPT += $(_VC_CRT_TYPE)d ;
   }
 
-  if $(DriverLinkage) = static { _CONFIG_OPT += -D_TARGET_STATIC_LIB=1 ; }
+  if $(BuildDagorEngineIndependentCode) != yes && $(KernelLinkage) = static { _CONFIG_OPT += -D_TARGET_STATIC_LIB=1 ; }
   if $(UseWholeOpt) = yes      { _CONFIG_OPT += /GL ; }
-
-  if $(Analyze) = yes          { _CONFIG_OPT += /analyze ; }
 
   _CONFIG_OPT += /FS ;         # Force Synchronous PDB Writes.
 
@@ -159,6 +185,7 @@ rule ProcessCompileTarget
 
   include $(Root)/prog/_jBuild/_vc/add_fp_fast.jam ;
   $(Target)__CPP_OPT = $(post_opt) $(_CPP_OPT) -TP ;
+  if $(BuildDagorEngineIndependentCode) = yes { $(Target)__CPP_OPT = $(post_opt) $(_CPP_OPT) -TP ; }
   $(Target)__C_OPT   = $(post_opt) $(Copt) $(_CPP_OPT) ;
   $(Target)__ASM_OPT = -I$(AddIncludes)/ $(ASMopt) ;
   $(Target)__PRE_OPT = $(pre_opt) ;
@@ -173,7 +200,7 @@ rule DepRule
   # add $(Root) prefix when needed
   for dep in $(>)
   {
-    switch $(dep) 
+    switch $(dep)
     {
       case ?:* : changed_dep += $(dep) ;   # absolute path with drive
       case \\* : changed_dep += $(dep) ;   # absolute path with root foolder (\)
@@ -204,28 +231,15 @@ actions together quietly compile_cpp
 #async
   $(VC_START_SHOW_INCLUDES_FILTER)
   set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
-  call_filtered $(_CPP_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) -showIncludes #\(-Fo$(1) $(2:G=))\#
+  call_filtered $(_CPP_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) -showIncludes #\( -Fo$(outfile:E=$(1)) $(2:G=) )\#
   if errorlevel 1 goto failed
-  if not exist $(1) goto failed
+  if not exist $(outfile:E=$(1)) goto failed
   goto end
   :failed
   set ERRORLEVEL=13
   :end
 
   clr_filters
-  $(CODE_CHECK) -x $(1) $(2)
-}
-
-actions together quietly compile_prefast_cpp
-{
-  set PATH=#\($(_VC_DIR)/bin)\#
-  call $(_PREFAST_COMPILER) $(pre_opt) $(_CPP_BASE_INCLUDES) $(cpp_opt) #\(-Fo$(1) $(2:G=))\#
-  if errorlevel 1 goto failed
-  if not exist $(1) goto failed
-  goto end
-  :failed
-  set ERRORLEVEL=13
-  :end
 }
 
 actions together quietly compile_c
@@ -233,16 +247,15 @@ actions together quietly compile_c
 #async
   $(VC_START_SHOW_INCLUDES_FILTER)
   set_filter $(1:S=.d) /$(VC_SHOW_INCLUDES_FILTER_PREFIX)(.+)/d1 $(1:G=:D=): $1
-  call_filtered $(_CPP_COMPILER) $(pre_opt) $(_C_BASE_INCLUDES) $(c_opt) -showIncludes #\(-Fo$(1) $(2:G=))\#
+  call_filtered $(_C_COMPILER) $(pre_opt) $(_C_BASE_INCLUDES) $(c_opt) -showIncludes #\( -Fo$(outfile:E=$(1)) $(2:G=) )\#
   if errorlevel 1 goto failed
-  if not exist $(1) goto failed
+  if not exist $(outfile:E=$(1)) goto failed
   goto end
   :failed
   set ERRORLEVEL=13
   :end
 
   clr_filters
-  $(CODE_CHECK) -x $(1) $(2)
 }
 
 include $(Root)/prog/_jBuild/_vc/win_rc.jam ;

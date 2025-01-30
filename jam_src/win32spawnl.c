@@ -43,6 +43,11 @@ intptr_t _win32_spawn(const char *cmdname, const char *params, ExecOutputFilter 
   if (!CreatePipe (&output_read, &output_write, &sa, 0))
     return -1;
 
+  // Disable parent process pipe handle inheritance
+  // https://learn.microsoft.com/en-us/windows/win32/procthread/creating-a-child-process-with-redirected-input-and-output
+  if (!SetHandleInformation(output_read, HANDLE_FLAG_INHERIT, 0))
+    goto err_exit_0;
+
   if (!DuplicateHandle(hProc, output_write, hProc, &stdout_write, 0, TRUE, DUPLICATE_SAME_ACCESS))
     goto err_exit_0;
   if (!DuplicateHandle (hProc, output_write, hProc, &stderr_write, 0, TRUE, DUPLICATE_SAME_ACCESS))

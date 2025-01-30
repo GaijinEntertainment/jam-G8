@@ -13,36 +13,36 @@ rule ProcessCompileTarget
   {
   }
 
+  local O3 = -O3 ;
+  if $(CheckOnly) = yes { O3 = -O0 ; }
   switch $(Config) {
     case dev :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=1 ;
-      if $(CheckOnly) = yes { _CONFIG_OPT += -O0 ; } else { _CONFIG_OPT += -O3 ; }
+      _CONFIG_OPT = $(O3) -DDAGOR_DBGLEVEL=1 ;
     case rel :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=0 -O3 -DNDEBUG=1 ;
+      _CONFIG_OPT = -DDAGOR_DBGLEVEL=0 $(O3) -DNDEBUG=1 ;
     case irel :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=-1 -O3 -DNDEBUG=1 ;
+      _CONFIG_OPT = -DDAGOR_DBGLEVEL=-1 $(O3) -DNDEBUG=1 ;
     case dbg :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=2 -ggdb3 ;
+      _CONFIG_OPT = -DDAGOR_DBGLEVEL=2 ;
     case * :
       _CONFIG_OPT = ;
   }
-  if $(CheckOnly) != yes && $(Config) != dbg { _CONFIG_OPT += -g ; }
+  if $(CheckOnly) != yes { _CONFIG_OPT += -g ; }
 
   if $(FortifySource) = yes { _CONFIG_OPT += -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 ; }
 
   if $(StackProtection) = yes {
-    _CONFIG_OPT += -fstack-protector  ;
+    _CONFIG_OPT += -fstack-protector ;
   }
   else {
-    _CONFIG_OPT += -fno-stack-protector  ;
+    _CONFIG_OPT += -fno-stack-protector ;
   }
 
   _CPP_OPT = "-I "$(AddIncludes) $(_CONFIG_OPT) $(_SUPPRESS_OPT) $(CPPopt) $(GlobalCPPopt) ;
 
-  if $(TargetType) = dll || $($(Target)__RootTargetType) = dll || $(DriverLinkage) = dynamic {
+  if $(TargetType) = dll || $($(Target)__RootTargetType) = dll || $(KernelLinkage) = dynamic {
     _CPP_OPT += -fPIC ;
   }
-
   if $(StrictCompile) = yes {
     if ! [ MATCH /(3rdPartyLibs)/ : $(Location) ] && ! [ MATCH /(devtools)/ : $(Location) ] { # Note: this doesn't work on 3rdp headers
       _CPP_OPT += -Wunused-parameter ;
@@ -63,7 +63,7 @@ rule DepRule
   for dep in $(>)
   {
     local rel_path = ;
-    switch $(dep)
+    switch $(dep) 
     {
       case /Develop/SDK* : dep = ; # skip target part
       case *: : dep = ; # skip target part
@@ -86,7 +86,7 @@ rule CheckHeaders
   NOUPDATE $(>) ; # tolerant to .d timestamp
 
   # scan line for header, skipping any ../ at the beginning [will be prefixed with $(Root)]
-  HDRSCAN  on $(>) = "[
+  HDRSCAN  on $(>) = "[ 
                       ]*([^ \\\
                       ]+)[ \\\
                       ]" ;

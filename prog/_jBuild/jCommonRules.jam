@@ -3,7 +3,12 @@ if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
 else if $(OS) in MACOSX { PYTHON_EXE = python ; }
 else if $(OS) in LINUX { PYTHON_EXE = python ; }
 
-actions together quietly null_action
+if $(OS) in MACOSX && $(PYTHON_EXE) = python3 && ! [ GLOB /usr/bin : $(PYTHON_EXE) ] {
+  echo warning: $(PYTHON_EXE) not found, trying to use python ;
+  PYTHON_EXE = python ;
+}
+
+actions together quietly updated null_action
 {
 }
 
@@ -31,6 +36,100 @@ rule MakeDirectory
   }
 }
 
+# concatenates (prefix : suffix) and simplifies path
+rule SimplifyComposedPath
+{
+  local prefix = $(1) ;
+  local suffix = $(2) ;
+  local rest = [ MATCH "^\.\.\/(.*)" : $(suffix) ] ;
+  while $(rest) && $(prefix) {
+    suffix = $(rest) ;
+    prefix = $(prefix:D) ;
+    rest = [ MATCH "^\.\.\/(.*)" : $(suffix) ] ;
+  }
+  return $(prefix)/$(suffix) ;
+}
+
+# concatenates (prefix : suffix) if suffix starts with ".." and simplifies path
+# This function is designed to create absolute path.
+# First argument is usually $(JAM_CWD), seconds argument is a path which is usually starting from "../" or "..\"
+# The function does not add prefix path for:
+# a) system libs like "ws2_32.lib", "advapi32.lib", ...
+# b) absolute paths to external libs like: "/home/bs/devtools/oodle.2.7/lib/liboo2corelinux64.a"
+# The function is useful for MSVC because it allows to get shorter paths than <CWD>/<RELATIVE_PATH>
+rule MakePathAbsolute prefix : suffix
+{
+  switch $(suffix) {
+    case ..* : return [ SimplifyComposedPath $(prefix) : $(suffix) ] ;
+  }
+  return $(suffix) ;
+}
+
+# concatenates (prefix : suffixList) if suffix starts with ".." and simplifies path
+# This function is designed to create absolute path lists.
+# First argument is usually $(JAM_CWD), seconds argument is a list of paths
+# which are usually starting from "../" or "..\"
+# The function does not add prefix path for:
+# a) system libs like "ws2_32.lib", "advapi32.lib", ...
+# b) absolute paths to external libs like: "/home/bs/devtools/oodle.2.7/lib/liboo2corelinux64.a"
+# The function is useful for MSVC because it allows to get shorter paths than <CWD>/<RELATIVE_PATH>
+rule MakePathListAbsolute prefix : suffixList
+{
+  local result = ;
+  local suffix = ;
+
+  for suffix in $(suffixList) {
+    result += [ MakePathAbsolute $(prefix) : $(suffix) ] ;
+  }
+  return $(result) ;
+}
+
+rule BuildValidJamString
+{
+  if $(1[2-]) { exit BuildValidJamString accepts single-string list only, use :J=\ if needed ; }
+  if $(1) in ":" "{" "}" "(" ")" "#" "=" ";" "||" "&&" { return \\$(1) ; }
+  local spec_sym = "\#\"\\\ " ;
+  local match_str = ([^$(spec_sym)]*)([$(spec_sym)])(.*) ;
+
+  local split = [ MATCH $(match_str) : $(1) ] ;
+  if ! $(split) { return $(1) ; }
+
+  local result = $(split[1]) ;
+  while $(split[2]) {
+    result += \\$(split[2]) ;
+    local s2 = [ MATCH $(match_str) : $(split[3]) ] ;
+    if $(s2) { split = $(s2) ; } else { split = $(split[3]) ; }
+    result += $(split[1]) ;
+  }
+  return $(result:J) ;
+}
+
+rule StrToCIdent
+{
+  local ident = $(1) ;
+  local spec_sym = "\\~\\#\\@\\$\\:\\.\\-" ;
+  local match_str = ([^$(spec_sym)]*)([$(spec_sym)])(.*) ;
+  local split = [ MATCH $(match_str) : $(ident) ] ;
+  while $(split) {
+    ident = $(split[1])_$(split[3]) ;
+    split = [ MATCH $(match_str) : $(ident) ] ;
+  }
+  return $(ident) ;
+}
+
+rule AutoscanBuildLists # folder_list : wildcard : dest_var : excl_regexp
+{
+  for sd in $(1) {
+    local s = [ GLOB $(Root)/$(Location)/$(sd) : $(2) ] ;
+    s = $(s:D=$(sd)) ;
+    if $(4) {
+      for f in $(s) { if ! [ MATCH "($(4))" : $(f) ] { $(3) += $(f) ; } }
+    } else {
+      $(3) += $(s) ;
+    }
+  }
+}
+
 if $(OS) = NT {
   actions together quietly raw_copy_file
   {
@@ -50,6 +149,14 @@ if $(OS) = NT {
   }
 }
 
+# get absolute path from location-based path (allows @ prefix to denote already absolude path)
+rule LocationBasedToAbsPath
+{
+  local split = [ MATCH @(.+) : $(1) ] ;
+  if $(split) { return $(split) ; }
+  return $(Root)/$(Location)/$(1) ;
+}
+
 rule BundleCopyFile
 {
   local dest = $(OutDir)/$(2) ;
@@ -62,12 +169,18 @@ rule BundleCopyFile
   raw_copy_file $(dest) : $(src) ;
 }
 
-if ! $(Platform) in macosx {
+if ! $(Platform) in macOS {
   rule ProcessBundleCopy
   {
     BundleCopyFile $(OutDir)/$(Target) : $(1[2]) : $(1[1]) ;
     if $(1[3]) { ProcessBundleCopy $(1[3-]) ; }
   }
+}
+
+rule Make_DAS_pull_AOT
+{
+  local nm  = [ MATCH ([^~]+).* : $(1:B) ] ;
+  return [ StrToCIdent $(nm)_DAS_pull_AOT ] ;
 }
 
 rule StripStrings # in_string_list : in_string_list_to_strip

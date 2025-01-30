@@ -6,40 +6,24 @@ if ! $(__DEFAULTS_INCLUDED) {
 
   Root      ?= ./ ;
 
-  NOCARE $(Root)/prog/platform.jam ;
-  include $(Root)/prog/platform.jam ;
-
   include $(Root)/prog/_jBuild/defPlatform.jam ;
 
-  PlatformSpec_win32 ?= vc16 ;
-  PlatformSpec_win64 ?= vc16 ;
-  PlatformSpec_macosx ?= clang64 ;
-  PlatformSpec_linux64 ?= gcc ;
+  PlatformSpec_$(Platform) ?= $(PlatformSpec_$(Platform)_$(PlatformArch)) ;
+  PlatformSpec_windows ?= vc16 ;
+  PlatformSpec_macOS ?= clang ;
+  PlatformSpec_linux ?= gcc ;
   CLangVer ?= 15.0.7 ;
   DefaultCPPStd = 17 ;
   CPPStd ?= 17 ;
   Sanitize ?= disabled ;
   NoMemBaseInclude ?= no ;
 
-  switch $(Platform) {
-    case win32 :   PlatformSpec ?= $(PlatformSpec_win32) ;
-    case win64 :   PlatformSpec ?= $(PlatformSpec_win64) ;
-    case macosx :  PlatformSpec ?= $(PlatformSpec_macosx) ;
-    case linux64 : PlatformSpec ?= $(PlatformSpec_linux64) ;
-    case * :       PlatformSpec ?= none ;
-  }
-  if $(PlatformSpec) = vc17
-  {
-    VCUpdateVer ?= 17.5.4 ;
-  } else if $(PlatformSpec) = vc16
-  {
-    VCUpdateVer ?= 16.10.3 ;
-  } else if $(PlatformSpec) = vc15
-  {
-    VCUpdateVer ?= 15.9.5 ;
-  } else
-  {
-    VCUpdateVer ?= 3 ;
+  PlatformSpec ?= $(PlatformSpec_$(Platform)) ;
+  switch $(PlatformSpec) {
+    case vc17 : VCUpdateVer ?= 17.9.5 ;
+    case vc16 : VCUpdateVer ?= 16.11.34 ;
+    case vc15 : VCUpdateVer ?= 15.9.5 ;
+    case * :    VCUpdateVer ?= 3 ;
   }
 
   if $(PlatformSpec) = clang {
@@ -51,11 +35,9 @@ if ! $(__DEFAULTS_INCLUDED) {
   IncludeMSVCDir ?= -I ;
 
   Config        ?= dev ;
-  CoreLinkage   ?= static ;
-  DriverLinkage ?= static ;
+  KernelLinkage ?= static ;
   MacOSXVer     ?= 11.0 ;
   MacOSXMinVer  ?= $(MacOSXVer) ;
-  MacOSXArch    ?= x86_64 ;
   WinSdkVer     ?= win.sdk.100 ;
   UseD3DMulti   ?= no ;
   MSVectorcall  ?= no ;
@@ -64,25 +46,26 @@ if ! $(__DEFAULTS_INCLUDED) {
   CheckOnly     ?= no ;
   ForcePdb      ?= no ;
   BundleVersion ?= 1.0.0 ;
+  DbgDigest     ?= once ;  # once, min, max, stop
 
-  if ! $(Platform) in win32 win64 { DisableUsingPCH ?= yes ; }
+  if ! $(Platform) in windows { DisableUsingPCH ?= yes ; }
 
   if $(Config) = dbg {
     CheckedContainers ?= yes ;
     StackProtection ?= yes ;
-  } else if $(Config) = rel {
+  } else if $(Config) in rel irel {
     CheckedContainers = no ;
     StackProtection ?= no ;
   } else {
     CheckedContainers ?= no ;
-    StackProtection ?= no ;
+    StackProtection ?= yes ;
   }
   if $(Sanitize) = address {
     StackProtection = no ;
   }
 
-  if $(Platform) in macosx { SSEVersion = ; } # use only default SSEVersion for these platforms
-  if $(Platform) in macosx win64 {
+  if $(Platform) in macOS { SSEVersion = ; } # use only default SSEVersion for these platforms
+  if $(Platform) in macOS || $(Platform)-$(PlatformArch) = windows-x86_64 {
     SSEVersion ?= 4 ;
   }
   SSEVersion ?= 2 ;
@@ -94,7 +77,7 @@ if ! $(__DEFAULTS_INCLUDED) {
     Rtti ?= yes ;
   } else if $(Config) in dbg dev {
     Exceptions ?= yes ;
-    CatchSEH ?= yes ;
+    CatchSEH ?= no ;
     Rtti ?= no ;
   } else {
     Exceptions ?= no ;
@@ -103,10 +86,6 @@ if ! $(__DEFAULTS_INCLUDED) {
   }
   
   UseWholeOpt ?= no ;
-
-  if $(Config) = dbg {
-    FastLink ?= yes ; # this speed-up linking but pdb become dependand on obj output
-  }
 
   if $(OS) = MACOSX {
     if ! $(_DEVTOOL) && [ GLOB /devtools : * ] { _DEVTOOL = /devtools ; }
@@ -125,7 +104,7 @@ if ! $(__DEFAULTS_INCLUDED) {
       }
     }
 
-    include $(Root)/prog/_jBuild/macosx/setup-ver.jam ;
+    include $(Root)/prog/_jBuild/macOS/setup-ver.jam ;
   }
   if $(OS) = LINUX {
     GDEVTOOL ?= $(HOME)/devtools ;
@@ -204,11 +183,14 @@ if ! $(__DEFAULTS_INCLUDED) {
     type ?= $(TargetType) ;
     if $(1:S) { return $(1) ; }
     if $(type) = exe {
-      if $(Platform) in win32 win64 { return $(1).exe ; }
+      if $(Platform) in windows { return $(1).exe ; }
     } else if $(type) = dll {
-      if $(Platform) in win32 win64 { return $(1).dll ; }
-      if $(Platform) in macosx { return $(1).dylib ; }
-      if $(Platform) in linux64 { if $(1:D) { return $(1:D)/lib$(1:D=:S=.so) ; } else { return lib$(1:D=:S=.so) ; } }
+      if $(Platform) in windows { return $(1).dll ; }
+      if $(Platform) in macOS {
+        if macOS-shortform in $(3) { return $(1:S=.dylib) ; }
+        if $(1:D) { return $(1:D)/lib$(1:D=:S=.dylib) ; } else { return lib$(1:D=:S=.dylib) ; }
+      }
+      if $(Platform) in linux { if $(1:D) { return $(1:D)/lib$(1:D=:S=.so) ; } else { return lib$(1:D=:S=.so) ; } }
     }
     return $(1) ;
   }
@@ -222,58 +204,53 @@ if ! $(__DEFAULTS_INCLUDED) {
 
   rule SetupOutputDir
   {
-    local out ;
+    local _platform = $(Platform) ;
+    local _platform_spec = $(PlatformSpec) ;
 
-    if $(PlatformSpec) in vc14 vc14u vc15 vc16 vc17 && $(VCUpdateVer) {
-      PlatformOutputDir ?= $(PlatformSpec)-$(VCUpdateVer) ;
-    } else if $(PlatformSpec) = clang && $(Platform) in win32 win64 {
-      PlatformOutputDir ?= $(PlatformSpec)~$(CLangVer) ;
+    if $(PlatformSpec) in vc14 vc14 vc15 vc16 vc17 && $(VCUpdateVer) {
+      _platform_spec = $(_platform_spec)-$(VCUpdateVer) ;
+    } else if $(PlatformSpec) = clang && $(Platform) in windows {
+      _platform_spec = $(_platform_spec)-$(CLangVer) ;
     }
+    if $(PlatformOutputDir) { _platform_spec = $(PlatformOutputDir) ; }
 
-    PlatformOutputDir ?= $(PlatformSpec) ;
-
-    if $(Platform) = macosx {
-      out = $(Platform)~$(MacOSXVer)~m$(MacOSXMinVer) ;
-      if $(MacOSXArch) = arm64 {
+    if $(Platform) = macOS {
+      _platform = $(_platform)-$(MacOSXVer)~m$(MacOSXMinVer) ;
+      if $(PlatformArch) = arm64 {
         local ver = [ MATCH "([^\.]+)\.(.+)" : $(MacOSXMinVer) ] ;
-        if ! $(ver[0]) || ! $(ver[0]) in 11 12 13 14 15 { Exit MacOSXArch=$(MacOSXArch) requires MacOSXMinVer 11+ ($(MacOSXMinVer) is not allowed) ; }
+        if ! $(ver[0]) || ! $(ver[0]) in 11 12 13 14 15 { Exit PlatformArch=$(PlatformArch) requires MacOSXMinVer 11+ ($(MacOSXMinVer) is not allowed) ; }
       }
-      if $(MacOSXArch) != x86_64 { out = $(out)~$(MacOSXArch) ; }
-      out = $(out)~$(PlatformOutputDir)~$(Config) ;
-    } else if $(Platform) in win32 win64 {
+    } else if $(Platform) in windows {
       local ver = [ MATCH "([^\.]+)\.([^\.]+)\.(.*)" : $(WinSdkVer) ] ;
       if ! $(ver[3] { ver = [ MATCH "([^\.]+)\.(.*)" : $(WinSdkVer) ] ; }
       if ( ! $(ver[2]) ) || ( ! $(ver[1]) in win win32 ) { Exit bad WinSdkVer\=$(WinSdkVer) ; }
       if $(ver[2]) = sdk && $(ver[3]) { ver = $(ver[3]) ; } else { ver = $(ver[2-]:J) ; }
-      out = $(Platform)~$(ver)~$(PlatformOutputDir)~$(Config) ;
-    } else {
-      out = $(Platform)~$(PlatformOutputDir)~$(Config) ;
+      _platform = $(_platform)-$(ver) ;
     }
+
+    local out = $(_platform)~$(PlatformArch)~$(Config)~$(_platform_spec) ;
 
     if $(CPPStd) != $(DefaultCPPStd) {
       out = $(out)~cpp$(CPPStd) ;
     }
 
-    if $(Platform) in win32 win64 linux64 macosx && $(UseD3DMulti) = yes {
+    if $(Platform) in windows linux macOS && $(UseD3DMulti) = yes {
       if ! -D_TARGET_D3D_MULTI in $(GlobalCPPopt) { GlobalCPPopt += -D_TARGET_D3D_MULTI ; }
       out = $(out)~m ;
-    } else if $(Platform) in macosx {
-      out = $(out)~MTL ;
     }
 
-    if $(MSVectorcall) = yes && $(Platform) in win32 win64 {
+    if $(MSVectorcall) = yes && $(PlatformArch) = x86_64 && $(Platform) in windows {
       out = $(out)~v ;
     }
 
-    if $(DriverLinkage) = dynamic {
+    if $(KernelLinkage) = dynamic {
       out = $(out)~krnlimp ;
-      if $(CoreLinkage) = dynamic { out = $(out)~coreimp ; }
     }
 
-    if $(Platform) in win32 win64 macosx linux64 {
+    if $(Platform) in windows macOS linux {
       out = $(out)~s$(SSEVersion) ;
     }
-    if $(Platform) in win32 win64 {
+    if $(Platform) in windows {
       switch $(VCMathOption) {
         case -fp:fast : # default choice and output name
         case -fp:precise : out = $(out)~fp ;
@@ -286,20 +263,17 @@ if ! $(__DEFAULTS_INCLUDED) {
       if ! -DDAGOR_FORCE_LOGS=1 in $(GlobalCPPopt) { GlobalCPPopt += -DDAGOR_FORCE_LOGS=1 ; }
       out = $(out)~log ;
     }
-    if $(Demo) = yes {
-      out = $(out)~demo ;
-    }
     if $(Exceptions) != no {
       out = $(out)~ex ;
-      if $(CatchSEH) != yes {
-        out = $(out)ns ;
+      if $(CatchSEH) = yes {
+        out = $(out)s ;
       }
     }
     if $(Rtti) != no {
       out = $(out)~rtti ;
     }
     if $(Sanitize) != disabled {
-      out = $(out)~san~$(Sanitize) ;
+      out = $(out)~san-$(Sanitize) ;
     }
     if $(CxxStdLib) = libc++ {
       out = $(out)~libcxx ;
@@ -327,9 +301,11 @@ if ! $(__DEFAULTS_INCLUDED) {
       out = $(out)~nmb ;
     }
 
-    if $(UseWholeOpt) != no && $(Platform) in win32 win64 {
+    if $(UseWholeOpt) != no {
       out = $(out)~who ;
     }
+
+    if $(Analyze) = yes { out = $(out)~a ; }
 
     _Output   = $(_OutputRoot)/$(out) ;
     _PrintedOutput   = [$(out)] ;
@@ -338,12 +314,9 @@ if ! $(__DEFAULTS_INCLUDED) {
   SetupOutputDir ;
 
   if ( clean in $(JAMTARGETS) ) || ( this in $(JAMTARGETS) ) { GLOBAL_OmitDependencies = 1 ; }
-  if depjam in $(JAMTARGETS) { GLOBAL_DependOnJam = 1 ; }
   if cache in $(JAMTARGETS) { GLOBAL_CacheDryRun = 1 ; }
   if clean in $(JAMTARGETS) { GLOBAL_CleanObj = clean ; }
   else if clean_all in $(JAMTARGETS) { GLOBAL_CleanObj = clean_all ; }
-
-  CODE_CHECK ?= rem if not errorlevel 1 call $(Root)/prog/_jBuild/_codeCheck/cc-dev.exe -d -r$(Root) ;
 
 
   # prepare command line to call another jam (used in some rules)

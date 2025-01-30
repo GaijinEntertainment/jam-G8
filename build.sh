@@ -21,7 +21,7 @@ export _DEVTOOL=${_DEVTOOL:-$devtool_dir}
 export OSX_CPU_TYPE=`uname -m`
 if gcc -v 2>&1 | grep -q ':e2k-'; then
   # Elbrus-e2k lcc compiler doesn't support some gcc switches
-  jam_opt=-sRemoveCompilerSwitches_linux64/gcc="-minline-all-stringops"
+  jam_opt=-sPlatformArch=e2k
 else
   jam_opt=
 fi
