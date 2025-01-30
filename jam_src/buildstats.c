@@ -1,49 +1,56 @@
 #include "buildstats.h"
 #include "jam.h"
 
-static unsigned long long *etaTable = NULL;
+struct EtaTableEntry
+{
+  unsigned long long hash;
+  unsigned long long time;
+};
+
+static struct EtaTableEntry *etaTable = NULL;
 static int etaTableLen = 0;
 static int etaTableCnt = 0;
 static unsigned long long totalETA_msec = 0;
 static unsigned long long totalTimeSpent_msec = 0;
 static int updTargets = 0;
+const int etaTableFields = 2;
 
 void etatab_set_hash(int idx, unsigned long long v)
 {
-  etaTable[idx * 2] = v;
+  etaTable[idx].hash = v;
 }
 
 unsigned long long etatab_hash(int idx)
 {
-  return etaTable[idx * 2];
+  return etaTable[idx].hash;
 }
 
 unsigned long long *etatab_time(int idx)
 {
-  return &etaTable[idx * 2 + 1];
+  return &etaTable[idx].time;
 }
 
 void etatab_ensure_fits(int amount)
 {
   if (etaTableLen <= amount)
   {
+    int oldSz = etaTableLen;
     etaTableLen = amount * 2;
-    etaTable = (unsigned long long *)realloc(etaTable, sizeof(unsigned long long) * etaTableLen * 2);
+    etaTable = (struct EtaTableEntry*)realloc(etaTable, sizeof(struct EtaTableEntry) * etaTableLen);
+    memset(etaTable + oldSz, 0, (etaTableLen - oldSz) * sizeof(struct EtaTableEntry));
   }
 }
 
 void bstat_load()
 {
-  etaTable = (unsigned long long *)malloc(sizeof(unsigned long long) * etaTableLen);
-
   FILE *etaf = fopen("jameta.bin", "rb+");
   if (etaf)
   {
     fseek(etaf, 0, SEEK_END);
-    etaTableCnt = ftell(etaf) / (sizeof(unsigned long long) * 2);
+    etaTableCnt = ftell(etaf) / (sizeof(struct EtaTableEntry));
     etatab_ensure_fits(etaTableCnt);
     fseek(etaf, 0, SEEK_SET);
-    int readed = fread(etaTable, sizeof(unsigned long long) * 2, etaTableCnt, etaf);
+    int readed = fread(etaTable, sizeof(struct EtaTableEntry), etaTableCnt, etaf);
     if (readed != etaTableCnt)
       etaTableCnt = readed > 0 ? readed : 0;
     fclose(etaf);
@@ -56,7 +63,7 @@ void bstat_save()
   FILE *etablob = fopen("jameta.bin", "wb");
   if (etablob)
   {
-    etaTableCnt = fwrite(etaTable, sizeof(unsigned long long) * 2, etaTableCnt, etablob);
+    etaTableCnt = fwrite(etaTable, sizeof(struct EtaTableEntry), etaTableCnt, etablob);
     fclose(etablob);
     printf("...saved %u ETA entries...\n", etaTableCnt);
   }
