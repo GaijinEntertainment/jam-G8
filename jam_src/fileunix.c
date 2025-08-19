@@ -109,7 +109,7 @@ file_dirscan(
 	scanback func,
 	void *closure )
 {
-	int n;
+	int n, i;
 	PATHNAME f;
 	DIR *d;
 	STRUCT_DIRENT *dirent;
@@ -138,9 +138,9 @@ file_dirscan(
 	if( DEBUG_BINDSCAN )
 	    printf( "scan directory %s\n", dir );
 
-	while( n-- )
+	for (i = 0; i < n; ++i)
 	{
-	    dirent = namelist[n];
+	    dirent = namelist[i];
 # ifdef old_sinix
 	    /* Broken structure definition on sinix. */
 	    f.f_base.ptr = dirent->d_name - 2;
