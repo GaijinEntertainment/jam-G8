@@ -109,9 +109,11 @@ file_dirscan(
 	scanback func,
 	void *closure )
 {
+	int n;
 	PATHNAME f;
 	DIR *d;
 	STRUCT_DIRENT *dirent;
+	STRUCT_DIRENT **namelist;
 	char filename[ MAXJPATH ];
 
 	/* First enter directory itself */
@@ -130,14 +132,15 @@ file_dirscan(
 
 	/* Now enter contents of directory */
 
-	if( !( d = opendir( dir ) ) )
+	if ( ( n = scandir( dir, &namelist, NULL, alphasort ) ) < 0 )
 	    return;
 
 	if( DEBUG_BINDSCAN )
 	    printf( "scan directory %s\n", dir );
 
-	while( dirent = readdir( d ) )
+	while( n-- )
 	{
+	    dirent = namelist[n];
 # ifdef old_sinix
 	    /* Broken structure definition on sinix. */
 	    f.f_base.ptr = dirent->d_name - 2;
@@ -149,9 +152,11 @@ file_dirscan(
 	    path_build( &f, filename, 0 );
 
 	    (*func)( closure, filename, 0 /* not stat()'ed */, (time_t)0 );
+
+	    free( dirent );
 	}
 
-	closedir( d );
+	free( namelist );
 }
 
 /*
