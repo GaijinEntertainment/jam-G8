@@ -27,7 +27,7 @@ else
 fi
 
 cd jam_src
-mkdir _output
+mkdir -p _output
 c_opt='-pipe -x c -c -MD -Wno-error -Wno-trigraphs -Wno-multichar -Wno-parentheses -DNDEBUG=1 -D_GNU_SOURCE -pthread'
 gcc $c_opt -o _output/builtins.o builtins.c
 gcc $c_opt -o _output/command.o command.c
