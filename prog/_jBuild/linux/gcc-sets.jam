@@ -4,7 +4,7 @@ StripType ?= debug ;
 _OBJ_SUFFIX  = .o ;
 
 local _DEF_COM_CMDLINE =
-  -pipe -c -msse$(SSEVersion) -m64
+  -pipe -c -msse$(SSEVersion)
   -MMD -Wno-trigraphs -Wno-multichar -Wformat -Wno-format-extra-args -Wno-ignored-attributes
   -Wno-deprecated -Wno-format-truncation -Wno-nonnull
   -ffunction-sections -fdata-sections -fno-omit-frame-pointer
@@ -32,8 +32,8 @@ if $(PlatformArch) = e2k { _DEF_COM_CMDLINE += -D_XM_NO_INTRINSICS_ -w2620 -w218
 local _DEF_C_CMDLINE = -std=c99 ;
 local _DEF_CPP_CMDLINE = -std=c++$(CPPStd) -fconserve-space -Wno-invalid-offsetof ;
 
-_LINK         = g++ -pipe -m64 -isysroot /usr/include ;
-_LINK_DLL     = g++ -pipe -m64 -isysroot /usr/include -shared ;
+_LINK         = g++ -pipe ;
+_LINK_DLL     = g++ -pipe -shared ;
 _LIB          = ar ranlib ;
 
 if $(UseLtoJobs) != 0  {
@@ -81,7 +81,7 @@ CXX ?= g++ ;
 
 _C_COMPILER   = $(CC) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
 _CPP_COMPILER = $(CXX) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
-_ASM_COMPILER = nasm -f elf64 ;
+_ASM_COMPILER = nasm -f ;
 _GAS_COMPILER = $(CC) -g -c ;
 
 _INCLUDE      = $(Root)/prog/dagorInclude $(Root)/prog/1stPartyLibs $(Root)/prog/3rdPartyLibs ;
