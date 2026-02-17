@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 project(jam-G8)
 set(TARGET_NAME "jam")
 
+find_package(Threads REQUIRED)
+
 # file(GLOB_RECURSE SRCS jam_src/*.c)
 file(GLOB_RECURSE SRCS
 jam_src/builtins.c
@@ -35,6 +37,8 @@ jam_src/outFilter.c
 file(GLOB_RECURSE HEADERS src/*.h)
 
 add_executable(${TARGET_NAME} ${SRCS})
+
+target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
 
 # install
 install(TARGETS 
