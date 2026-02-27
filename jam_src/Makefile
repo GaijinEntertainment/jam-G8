@@ -59,7 +59,7 @@ SOURCES = \
 	filent.c fileos2.c fileunix.c filevms.c glob.c hash.c \
 	headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c \
 	newstr.c option.c parse.c pathunix.c pathvms.c regexp.c \
-	rules.c scan.c search.c timestamp.c variable.c
+	rules.c scan.c search.c timestamp.c variable.c buildstats.c
 
 all: $(EXENAME)
 	$(EXENAME)

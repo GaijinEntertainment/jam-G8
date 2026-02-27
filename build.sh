@@ -55,7 +55,8 @@ gcc $c_opt -o _output/search.o search.c
 gcc $c_opt -o _output/variable.o variable.c
 gcc $c_opt -o _output/timestamp.o timestamp.c
 gcc $c_opt -o _output/outFilter.o outFilter.c
-g++ -pipe _output/builtins.o _output/command.o _output/compile.o _output/expand.o _output/execdmc.o _output/fileunix.o _output/glob.o _output/hash.o _output/headers.o _output/jam.o _output/jambase.o _output/jamgram.o _output/lists.o _output/make.o _output/make1.o _output/newstr.o _output/option.o _output/parse.o _output/pathunix.o _output/regexp.o _output/rules.o _output/scan.o _output/search.o _output/variable.o _output/timestamp.o _output/outFilter.o -Wl,-lpthread -o ../jam_0
+gcc $c_opt -o _output/buildstats.o buildstats.c
+g++ -pipe _output/builtins.o _output/command.o _output/compile.o _output/expand.o _output/execdmc.o _output/fileunix.o _output/glob.o _output/hash.o _output/headers.o _output/jam.o _output/jambase.o _output/jamgram.o _output/lists.o _output/make.o _output/make1.o _output/newstr.o _output/option.o _output/parse.o _output/pathunix.o _output/regexp.o _output/rules.o _output/scan.o _output/search.o _output/variable.o _output/timestamp.o _output/outFilter.o _output/buildstats.o -Wl,-lpthread -o ../jam_0
 rm -rf _output
 cd ..
 rm ./jam

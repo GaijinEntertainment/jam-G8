@@ -18,7 +18,7 @@ Sources =
   headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c
   newstr.c option.c parse.c pathunix.c  regexp.c
   rules.c scan.c search.c variable.c timestamp.c
-  outFilter.c
+  outFilter.c buildstats.c
 ;
 
 if $(OS) = NT {

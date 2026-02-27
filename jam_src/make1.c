@@ -64,7 +64,7 @@
 
 static void make1a( TARGET *t, TARGET *parent );
 static void make1b( TARGET *t );
-static void make1c( TARGET *t );
+static void make1c( TARGET *t, int targetIndex);
 static void make1d( void *closure, int status );
 
 static CMD *make1cmds( ACTIONS *a0 );
@@ -237,9 +237,6 @@ make1b( TARGET *t )
 	    {
 		++counts->total;
 
-		if( DEBUG_MAKE && !( counts->total % 100 ) )
-		    printf( "...on %dth target...\n", counts->total );
-
 		pushsettings( t->settings );
 		t->cmds = (char *)make1cmds( t->actions );
 		popsettings( t->settings );
@@ -256,15 +253,16 @@ make1b( TARGET *t )
 	/* be run) the chain will be empty and make1c() will directly */
 	/* signal the completion of target. */
 
-	make1c( t );
+	make1c( t , counts->total );
 }
 
 /*
  * make1c() - launch target's next command, call make1b() when done
  */
 
+
 static void
-make1c( TARGET *t )
+make1c( TARGET *t, int targetIndex )
 {
 	CMD	*cmd = (CMD *)t->cmds;
 	/* If there are (more) commands to run to build this target */
@@ -298,7 +296,10 @@ make1c( TARGET *t )
 	    else
 	    {
 		fflush( stdout );
-		execcmd( cmd->buf, make1d, t, cmd->shell );
+		EXECSTATS exstats;
+		exstats.estimated_id = t->estimated_id;
+		exstats.index = targetIndex;
+		execcmd( cmd->buf, make1d, t, cmd->shell, exstats );
 	    }
 	}
 	else
@@ -396,7 +397,7 @@ make1d(
 
 	cmd_free( cmd );
 
-	make1c( t );
+	make1c( t, 1 );
 }
 
 /*
