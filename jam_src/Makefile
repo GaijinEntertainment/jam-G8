@@ -54,7 +54,7 @@ TARGET = -o $(EXENAME)
 #CC = gcc
 
 SOURCES = \
-	builtins.c \
+	builtins.c changedPaths.c \
 	command.c compile.c execdmc.c outFilter.c execvms.c expand.c \
 	filent.c fileos2.c fileunix.c filevms.c glob.c hash.c \
 	headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c \
