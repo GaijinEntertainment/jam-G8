@@ -3,3 +3,5 @@ _output/
 build/
 jam
 jam.debuginfo
+jam_0.exe
+jam_src/*.obj
