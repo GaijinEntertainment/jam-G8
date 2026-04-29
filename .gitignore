@@ -2,4 +2,7 @@
 _output/
 build/
 jam
+jam.exe
 jam.debuginfo
+jam_0.exe
+*.obj

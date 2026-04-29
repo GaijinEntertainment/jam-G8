@@ -62,6 +62,7 @@
 # include "make.h"
 # include "headers.h"
 # include "command.h"
+# include "changedPaths.h"
 
 # ifndef max
 # define max( a,b ) ((a)>(b)?(a):(b))
@@ -151,6 +152,35 @@ make(
 	}
 
 	status = counts->cantfind || counts->cantmake;
+
+	/*
+	 * Gaijin extension: JamChangedFilesPath early-exit.
+	 * When the variable is set, treat its value as a path to a file
+	 * containing "the list of source paths the caller considers changed
+	 * in this commit".  If no requested target's transitive deps intersect
+	 * that list, skip make1() entirely and exit successfully.  See
+	 * changedPaths.{h,c}.  Disabled when the variable is empty / unset, or
+	 * when make0 already reported errors (let make1 surface them).
+	 */
+	if( !status )
+	{
+	    LIST *cp_var = var_get( "JamChangedFilesPath" );
+	    if( cp_var && cp_var->string && cp_var->string[0] )
+	    {
+		int affected = 0;
+		if( !changed_paths_load( cp_var->string ) )
+		    return 1;
+		for( i = 0; i < n_targets && !affected; i++ )
+		    affected = changed_paths_test( bindtarget( targets[i] ) );
+		if( !affected )
+		{
+		    printf( "jam: no targets affected by changed paths; skipping build\n" );
+		    changed_paths_free();
+		    return 0;
+		}
+		changed_paths_free();
+	    }
+	}
 
 	for( i = 0; i < n_targets; i++ )
 	    status |= make1( bindtarget( targets[i] ) );
