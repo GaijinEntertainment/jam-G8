@@ -171,7 +171,7 @@ extern char **environ;
 # endif
 # endif
 
-#define JAMBUILDSTR "1.32-2025/08/19"
+#define JAMBUILDSTR "1.33-2026/05/07"
 
 int main(int argc, char **argv, char **arg_environ)
 {
@@ -225,7 +225,7 @@ int main(int argc, char **argv, char **arg_environ)
 	if( ( s = getoptval( optv, 'v', 0 ) ) )
 	{
 	    printf( "Jam %s. %s. [Build %s] ", VERSION, OSMINOR, JAMBUILDSTR );
-	    printf( "Copyright 1993-2002 Christopher Seiwald [Modified by Gaijin Games KFT, 2004-2025]\n" );
+	    printf( "Copyright 1993-2002 Christopher Seiwald [Modified by Gaijin Games KFT, 2004-2026]\n" );
 
 	    return EXITOK;
 	}
