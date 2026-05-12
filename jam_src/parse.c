@@ -20,6 +20,7 @@
 # include "parse.h"
 # include "scan.h"
 # include "newstr.h"
+# include "changedPaths.h"
 
 static PARSE *yypsave;
 
@@ -28,6 +29,8 @@ parse_file( const char *f )
 {
 	/* Suspend scan of current file */
 	/* and push this new file in the stream */
+
+	changed_paths_register_parsed_file( f );
 
 	yyfparse(f);
 
