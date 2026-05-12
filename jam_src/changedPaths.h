@@ -36,4 +36,15 @@ int  changed_paths_load( const char *list_file );
 int  changed_paths_test( struct _target *t );
 void changed_paths_free( void );
 
+/*
+ * Called from parse_file() to record every jam-script file that's
+ * been parsed (top-level via -f, default jamfile, every `include`).
+ * These files are NOT in the TARGET dependency graph but their
+ * contents drive the build, so we must short-circuit to "proceed"
+ * when any of them is in the changed-paths set.  The "+" sigil
+ * (internal precompiled Jambase) and NULL inputs are silently
+ * ignored.  Safe to call before changed_paths_load.
+ */
+void changed_paths_register_parsed_file( const char *path );
+
 #endif /* CHANGED_PATHS_H */

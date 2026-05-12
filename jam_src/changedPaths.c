@@ -65,8 +65,10 @@ typedef struct {
 
 static cp_FileSet g_files;
 static cp_DirVec  g_dirs;
+static cp_DirVec  g_parsed;	/* raw paths of every parsed jam script */
 static int        g_loaded   = 0;
 static int        g_walk_gen = 0;
+static int        g_jamfile_changed = 0;	/* any parsed file in change set */
 
 /*
  * Both the changed-paths list entries and the walked TARGET boundnames
@@ -562,11 +564,38 @@ changed_paths_load( const char *list_file )
 
 	g_loaded = 1;
 
+	/*
+	 * Check every jam-script file that parse_file() recorded against
+	 * the just-loaded change set.  If any parsed Jamfile (top-level
+	 * or transitively included) is in the change set, force the
+	 * build to proceed: Jamfile changes can rewire the dependency
+	 * graph in ways the post-make0 walk cannot detect (a target may
+	 * have been added, removed, or had its sources changed).
+	 */
+	g_jamfile_changed = 0;
+	{
+	    int   i;
+	    char  abs[8192];
+	    for ( i = 0; i < g_parsed.count; i++ ) {
+		cp_make_abs( abs, sizeof( abs ), g_parsed.arr[i], g_jam_cwd );
+		cp_canon( abs );
+		if ( abs[0] && ( cp_fs_contains( &g_files, abs ) ||
+				 cp_dv_contains_prefix( &g_dirs, abs ) ) ) {
+		    g_jamfile_changed = 1;
+		    if ( DEBUG_DEPENDS )
+			printf( "JamChangedFilesPath: jamfile in change set: '%s'\n", abs );
+		    break;
+		}
+	    }
+	}
+
 	if ( DEBUG_DEPENDS ) {
 	    printf( "JamChangedFilesPath: loaded %d files, %d dirs from '%s'\n",
 		g_files.count, g_dirs.count, list_file );
 	    printf( "JamChangedFilesPath: cwd='%s' root='%s'\n",
 		g_jam_cwd, g_changed_root );
+	    printf( "JamChangedFilesPath: parsed jam files tracked: %d\n",
+		g_parsed.count );
 	}
 
 	return 1;
@@ -632,8 +661,23 @@ cp_walk( TARGET *t, int gen )
 int
 changed_paths_test( TARGET *t )
 {
+	if ( g_jamfile_changed )
+	    return 1;
 	g_walk_gen++;
 	if ( !g_walk_gen ) /* skip 0 (the un-visited sentinel) on wraparound */
 	    g_walk_gen = 1;
 	return cp_walk( t, g_walk_gen );
+}
+
+void
+changed_paths_register_parsed_file( const char *path )
+{
+	if ( !path || !path[0] )
+	    return;
+	/* "+" is jam's sigil for the precompiled built-in Jambase
+	 * (jambase.c) -- there is no file on disk and nothing for the
+	 * change-set to match. */
+	if ( path[0] == '+' && path[1] == 0 )
+	    return;
+	cp_dv_push( &g_parsed, path );
 }
