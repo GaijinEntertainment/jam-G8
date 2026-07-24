@@ -34,7 +34,7 @@ intptr_t _win32_spawn(const char *cmdname, const char *params, ExecOutputFilter 
   HANDLE stdout_write, stderr_write;
   DWORD ret_code;
   char *cmdline;
-  int flags = CREATE_NEW_CONSOLE;
+  int flags = CREATE_NO_WINDOW; // own console (Ctrl+C isolation), but no conhost windows to stall the desktop at -j64
 
   sa.nLength = sizeof (SECURITY_ATTRIBUTES);
   sa.lpSecurityDescriptor = NULL;
