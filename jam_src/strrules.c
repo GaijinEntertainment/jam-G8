@@ -66,6 +66,7 @@
 # include "pathsys.h"
 # include "compile.h"
 # include "builtins.h"
+# include "prof.h"
 
 # include <string.h>
 # include <stdlib.h>
@@ -434,16 +435,131 @@ builtin_make_path_list_absolute(
 /* stay hot even when the parse phase and depcache are already fast.  */
 
 /*
- * deprule_emit_rooted() - append $(Root)/$(dep) (a list product over
- * Root's elements) to out.
+ * The same dependency names recur across nearly every scanned file --
+ * every translation unit pulls in the same engine headers -- so this
+ * transform otherwise rebuilds and re-interns the identical
+ * "$(Root)/<dep>" string tens of times per name.  Memoize it on the
+ * ADDRESS of the dep name, and rebuild the memo whenever $(Root)
+ * changes, which is the only other input.
+ *
+ * Keying on an address is sound because the bytes it points at are
+ * immortal, not because the pointer came from newstr(): the names
+ * arrive interned from the scan cache or newstr, freestr() is a no-op
+ * and list_free() recycles only the LIST nodes, so a stored key can
+ * never be freed and re-used for different bytes.  DepRuleDotDot
+ * relies on exactly that - it hands us an INTERIOR pointer (dep += 3
+ * past each "../"), which is not a newstr() result but is just as
+ * permanent.  Equal pointer therefore still implies equal name; two
+ * different pointers to equal text merely cost an extra miss.
+ *
+ * A miss does the same work the interpreted rule did, plus one
+ * list_copy so the memo can own its answer.
  */
+
+typedef struct {
+	const char	*dep;		/* key: address of an immortal name */
+	LIST		*rooted;	/* $(Root)/dep, one per Root element */
+} DR_MEMO;
+
+# define DR_MEMO_BITS 15
+# define DR_MEMO_SLOTS ( 1 << DR_MEMO_BITS )
+
+static DR_MEMO dr_memo[ DR_MEMO_SLOTS ];
+
+/*
+ * Which $(Root) the memo was built against.  Comparing the LIST head
+ * pointer is NOT enough: list_append() grafts onto an existing list in
+ * place, so `Root += x` leaves the head unchanged while the contents
+ * differ - the memo would then hand out paths missing the new element.
+ * Keep the element strings (interned, so pointer equality is content
+ * equality) and compare them exactly.  A Root longer than we track
+ * simply disables the memo rather than risking a stale answer - and
+ * because such a Root can never compare same, the flush below is
+ * conditional, or every call would pay for a whole-table wipe.
+ */
+
+# define DR_ROOT_MAX 8
+
+static const char *dr_root[ DR_ROOT_MAX ];
+static int dr_root_n = -1;		/* -1: nothing memoized yet */
+
+static int
+dr_root_same( LIST *root )
+{
+	int n = 0;
+
+	for( ; root && n < DR_ROOT_MAX; root = list_next( root ), n++ )
+	    if( dr_root[n] != root->string )
+		return 0;
+
+	return !root && n == dr_root_n;
+}
+
+static int
+dr_root_remember( LIST *root )
+{
+	int n = 0;
+
+	for( ; root && n < DR_ROOT_MAX; root = list_next( root ), n++ )
+	    dr_root[n] = root->string;
+
+	if( root )
+	{
+	    dr_root_n = -1;	/* too long to track: memo stays off */
+	    return 0;
+	}
+
+	dr_root_n = n;
+	return 1;
+}
+
+static void
+dr_memo_flush( void )
+{
+	int i;
+
+	for( i = 0; i < DR_MEMO_SLOTS; i++ )
+	    if( dr_memo[i].dep )
+	    {
+		list_free( dr_memo[i].rooted );
+		dr_memo[i].dep = 0;
+		dr_memo[i].rooted = 0;
+	    }
+}
 
 static LIST *
 deprule_emit_rooted( LIST *out, LIST *root, const char *dep )
 {
 	char buf[ MAXJPATH * 2 + 2 ];
 	int dl = (int)strlen( dep );
+	unsigned i;
+	LIST *l;
+	int memoize;
 
+	/* $(Root) is a plain variable and a target may shadow it, so the
+	 * memo is only valid while the list it was built from is */
+
+	if( !dr_root_same( root ) )
+	{
+	    /* Only flush when something can actually be in the table.  A
+	     * Root too long to track never compares same, so without this
+	     * guard every single call would wipe the whole memo - far more
+	     * expensive than the interpreted rule it replaces. */
+
+	    if( dr_root_n >= 0 )
+		dr_memo_flush();
+
+	    memoize = dr_root_remember( root );
+	}
+	else
+	    memoize = dr_root_n >= 0;
+
+	i = (unsigned)( ( (size_t)dep >> 4 ) * 2654435761u ) & ( DR_MEMO_SLOTS - 1 );
+
+	if( memoize && dr_memo[i].dep == dep )
+	    return list_append( out, list_copy( L0, dr_memo[i].rooted ) );
+
+	l = L0;
 	for( ; root; root = list_next( root ) )
 	{
 	    int rl = (int)strlen( root->string );
@@ -454,10 +570,23 @@ deprule_emit_rooted( LIST *out, LIST *root, const char *dep )
 	    memcpy( buf, root->string, rl );
 	    buf[ rl ] = '/';
 	    memcpy( buf + rl + 1, dep, dl + 1 );
-	    out = list_new( out, buf, 0 );
+	    l = list_new( l, buf, 0 );
 	}
 
-	return out;
+	if( memoize )
+	{
+	    /* direct-mapped: the slot's previous occupant is evicted, and
+	     * the memo is its only owner, so hand it back to the freelist */
+
+	    if( dr_memo[i].dep )
+		list_free( dr_memo[i].rooted );
+
+	    dr_memo[i].dep = dep;
+	    dr_memo[i].rooted = l;
+	    return list_append( out, list_copy( L0, l ) );
+	}
+
+	return list_append( out, l );
 }
 
 static int
@@ -584,6 +713,8 @@ builtin_deprule_plain(
 	LIST *changed = L0;
 	const char *last = 0;
 
+	PROF_ENTER( PROF_DR_XFORM );
+
 	for( l = lol_get( args, 1 ); l; l = list_next( l ) )
 	{
 	    last = l->string;
@@ -595,7 +726,10 @@ builtin_deprule_plain(
 	}
 
 	leak_loopvar( "dep", last );
+	PROF_LEAVE( PROF_DR_XFORM );
+	PROF_ENTER( PROF_DR_FINISH );
 	deprule_finish( args, changed );
+	PROF_LEAVE( PROF_DR_FINISH );
 	return L0;
 }
 
@@ -619,6 +753,8 @@ builtin_deprule_dotdot(
 	LIST *l;
 	LIST *changed = L0;
 	const char *last = 0;
+
+	PROF_ENTER( PROF_DR_XFORM );
 
 	for( l = lol_get( args, 1 ); l; l = list_next( l ) )
 	{
@@ -679,7 +815,10 @@ builtin_deprule_dotdot(
 	}
 
 	leak_loopvar( "dep_full", last );
+	PROF_LEAVE( PROF_DR_XFORM );
+	PROF_ENTER( PROF_DR_FINISH );
 	deprule_finish( args, changed );
+	PROF_LEAVE( PROF_DR_FINISH );
 	return L0;
 }
 
