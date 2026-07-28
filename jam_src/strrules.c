@@ -70,6 +70,10 @@
 # include <string.h>
 # include <stdlib.h>
 
+/* the procedure load_builtins() bound Includes to */
+static PARSE *includes_builtin;
+
+
 /* ------------------------------------------------------------------ */
 
 /*
@@ -509,9 +513,19 @@ deprule_finish( LOL *args, LIST *changed )
 	RULE	*inc = bindrule( "Includes" );
 
 	/* Includes $(<) : $(changed) ; -- dispatched for real when a
-	 * jamfile overrode the builtin, inlined otherwise */
+	 * jamfile overrode the builtin, inlined otherwise.
+	 *
+	 * NB the builtin itself HAS a procedure (load_builtins binds it
+	 * to builtin_depends), so testing inc->procedure alone is always
+	 * true: compare against the procedure load_builtins installed,
+	 * which is what actually marks an override.
+	 *
+	 * `actions Includes { ... }` is an override too, even though it
+	 * leaves the procedure alone: evaluate_rule() attaches the ACTION
+	 * before it ever looks at the procedure, so inlining would drop
+	 * it.  Same split the null_action dispatch below makes. */
 
-	if( inc->procedure )
+	if( inc->procedure != includes_builtin || inc->actions )
 	{
 	    LOL lol;
 
@@ -692,6 +706,18 @@ void
 load_strrules()
 {
 	LIST *names = L0;
+
+	/* What load_builtins() bound Includes to, so deprule_finish can
+	 * tell the builtin from a jamfile override.  Hold a reference:
+	 * redefining a rule parse_free()s the old procedure (compile.c),
+	 * and a freed PARSE whose address a later parse_make() reuses
+	 * would make an override compare equal to the builtin - silently
+	 * dropping the override and building the wrong graph.  Includes
+	 * and INCLUDES share this one node, so the extra ref also closes
+	 * a dangle that predates these builtins. */
+
+	includes_builtin = bindrule( "Includes" )->procedure;
+	parse_refer( includes_builtin );
 
 	bindrule( "SplitStringsOnSpace" )->procedure =
 	    parse_make( builtin_split_on_space, P0, P0, P0, C0, C0, 0 );
