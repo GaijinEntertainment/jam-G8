@@ -192,6 +192,7 @@ int main(int argc, char **argv, char **arg_environ)
 	argc--, argv++;
 
 	statecache_note_argv( argc, argv, JAMBUILDSTR " " __DATE__ " " __TIME__ );
+	depcache_note_args( argc, argv );
 
 #ifndef unix
   putenv("VS_UNICODE_OUTPUT="); // reset this var to prevent VS from capturing cl.exe output

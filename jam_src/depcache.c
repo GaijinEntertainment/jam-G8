@@ -105,8 +105,41 @@ static long long dc_run_start;	/* racy-entry horizon (msig units) */
 static const char *dc_pending_name;
 static DCSIG dc_pending_sig;
 static int  dc_pending_ok;
+static unsigned dc_arghash = 5381u;	/* cwd + -f/-s options */
 
 /* ------------------------------------------------------------------ */
+
+static unsigned
+dc_strmix( unsigned h, const char *s )
+{
+	while( *s )
+	    h = ( h * 33u ) ^ (unsigned char)*s++;
+	return ( h * 33u ) ^ 0xffu;	/* separator */
+}
+
+void
+depcache_note_args( int argc, char **argv )
+{
+	int i;
+
+	/* only the options that shape the parse/config select the
+	 * default cache file: -f (jamfiles) and -s (variables), in
+	 * both attached (-sX=y) and separate (-f file) spellings.
+	 * Bare targets are excluded so `jam` and `jam sometarget`
+	 * share one dependency cache. */
+
+	for( i = 0; i < argc; i++ )
+	{
+	    const char *a = argv[i];
+
+	    if( a[0] == '-' && ( a[1] == 'f' || a[1] == 's' ) )
+	    {
+		dc_arghash = dc_strmix( dc_arghash, a );
+		if( !a[2] && i + 1 < argc )
+		    dc_arghash = dc_strmix( dc_arghash, argv[++i] );
+	    }
+	}
+}
 
 static unsigned
 dc_scanhash( LIST *hdrscan, int hdrfs )
@@ -379,12 +412,77 @@ dc_init( void )
 	dc_state = -1;
 
 	var = var_get( "JamDepCachePath" );
-	if( !var || !var->string || !var->string[0] )
-	    return 0;
 
-	if( strlen( var->string ) >= sizeof( dc_path ) )
-	    return 0;
-	strcpy( dc_path, var->string );
+	if( var )
+	{
+	    /* explicitly set: empty value means OFF, else use the path */
+
+	    if( !var->string || !var->string[0] )
+		return 0;
+	    if( strlen( var->string ) >= sizeof( dc_path ) )
+		return 0;
+	    strcpy( dc_path, var->string );
+	}
+	else
+	{
+	    /* unset: derive a per-invocation default, unless killed */
+
+	    const char *no = getenv( "JAM_NO_CACHE" );
+	    LIST *dirvar = var_get( "JamCacheDir" );
+	    const char *base;
+	    char dir[ 900 ];
+	    char cwd[ 1024 ];
+	    unsigned h;
+
+	    if( no && *no && *no != '0' )
+		return 0;
+
+	    if( dirvar && dirvar->string && dirvar->string[0] )
+	    {
+		if( strlen( dirvar->string ) >= sizeof( dir ) )
+		    return 0;
+		strcpy( dir, dirvar->string );
+	    }
+	    else
+	    {
+# ifdef OS_NT
+		base = getenv( "LOCALAPPDATA" );
+		if( !base || strlen( base ) >= sizeof( dir ) - 16 )
+		    return 0;
+		sprintf( dir, "%s\\jam-g8", base );
+# else
+		base = getenv( "XDG_CACHE_HOME" );
+		if( base && *base && strlen( base ) < sizeof( dir ) - 16 )
+		    sprintf( dir, "%s/jam-g8", base );
+		else
+		{
+		    base = getenv( "HOME" );
+		    if( !base || strlen( base ) >= sizeof( dir ) - 24 )
+			return 0;
+		    sprintf( dir, "%s/.cache/jam-g8", base );
+		}
+# endif
+	    }
+
+# ifdef OS_NT
+	    _mkdir( dir );
+# else
+	    mkdir( dir, 0755 );
+# endif
+
+	    cwd[0] = 0;
+	    if( !getcwd( cwd, sizeof( cwd ) - 1 ) || !cwd[0] )
+		return 0;
+
+	    h = dc_strmix( dc_arghash, cwd );
+	    sprintf( dc_path, "%s%cdc-%08x.bin", dir,
+# ifdef OS_NT
+		'\\',
+# else
+		'/',
+# endif
+		h );
+	}
 
 	dc_run_start = dc_now_msig();
 	dc_hash = hashinit( sizeof( DCENTRY ), "depcache" );

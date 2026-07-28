@@ -11,14 +11,25 @@
  * the cached list is fed to HDRRULE exactly as a fresh scan result
  * would be, so rule semantics are unchanged.
  *
- * Enabled only when the jam variable JamDepCachePath is set (path of
- * the cache file).  Unset = fully disabled, zero behavior change.
+ * Path selection (opt-out design):
+ *   - JamDepCachePath set non-empty: use that file.
+ *   - JamDepCachePath set EMPTY:     cache disabled.
+ *   - unset: a per-invocation default under JamCacheDir (default
+ *     %LOCALAPPDATA%\jam-g8 / $XDG_CACHE_HOME/jam-g8), named by a
+ *     hash of the cwd and the -f/-s options, so different trees and
+ *     configurations never share a file while target subsets do.
+ *     Env JAM_NO_CACHE=1 suppresses the default (explicit paths
+ *     still win).
  */
 
 #ifndef JAM_DEPCACHE_H
 #define JAM_DEPCACHE_H
 
 /* NOTE: include after lists.h and rules.h (jam headers have no guards) */
+
+/* remember the command line (call once from main); only -f/-s
+ * options participate in the default cache file name */
+void depcache_note_args( int argc, char **argv );
 
 /* On a hit stores a fresh LIST in *deps (caller owns; may be 0 for
  * "no includes") and returns 1.  Returns 0 on miss or disabled.
