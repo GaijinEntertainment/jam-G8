@@ -30,6 +30,11 @@
 
 static LIST *freelist = 0;	/* junkpile for list_free() */
 
+# define LIST_BLOCK 8192
+
+static LIST *pool = 0;		/* bump allocator for fresh LISTs */
+static int pool_left = 0;
+
 /*
  * list_append() - append a list onto another one, returning total
  */
@@ -88,7 +93,19 @@ list_new(
 	}
 	else
 	{
-	    l = (LIST *)malloc( sizeof( *l ) );
+	    /* list_free() only ever chains nodes onto freelist, so a
+	     * LIST is never returned to the allocator; hand them out
+	     * from bump-allocated blocks rather than one malloc each
+	     * (large trees build millions of them). */
+
+	    if( !pool_left )
+	    {
+		pool = (LIST *)malloc( LIST_BLOCK * sizeof( LIST ) );
+		pool_left = LIST_BLOCK;
+	    }
+
+	    l = pool++;
+	    pool_left--;
 	}
 
 	/* If first on chain, head points here. */

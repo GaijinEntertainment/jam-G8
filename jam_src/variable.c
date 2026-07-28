@@ -37,6 +37,7 @@
 # include "expand.h"
 # include "hash.h"
 # include "newstr.h"
+# include "statecache.h"
 
 static struct hash *varhash = 0;
 
@@ -49,9 +50,12 @@ typedef struct _variable VARIABLE ;
 struct _variable {
 	const char	*symbol;
 	LIST		*value;
+	int		read;		/* var_get() seen (parse-state cache) */
+	int		written;	/* var_set() seen since var_clear_written() */
 } ;
 
 static VARIABLE *var_enter( const char *symbol );
+static void var_iterate_one( void *closure, HASHDATA *data );
 static void var_dump( const char *symbol, LIST *value, const char *what );
 
 
@@ -223,11 +227,16 @@ var_get( const char *symbol )
 
 	if( varhash && hashcheck( varhash, (HASHDATA **)&v ) )
 	{
+	    v->read = 1;
 	    if( DEBUG_VARGET )
 		var_dump( v->symbol, v->value, "get" );
 	    return v->value;
 	}
-    
+
+	/* a read of an unset variable also influences the parse */
+
+	statecache_note_varmiss( symbol );
+
 	return 0;
 }
 
@@ -257,19 +266,29 @@ var_set(
 	{
 	case VAR_SET:
 	    /* Replace value */
+	    v->written = 1;
 	    list_free( v->value );
 	    v->value = value;
 	    break;
 
 	case VAR_APPEND:
-	    /* Append value */
+	    /* Append value.  The result also depends on the PRIOR value
+	     * (possibly imported from the environment), so this counts
+	     * as a read for the parse-state cache manifest. */
+	    v->read = 1;
+	    v->written = 1;
 	    v->value = list_append( v->value, value );
 	    break;
 
 	case VAR_DEFAULT:
-	    /* Set only if unset */
+	    /* Set only if unset -- either way the outcome depended on
+	     * whether (and how) the variable was already set */
+	    v->read = 1;
 	    if( !v->value )
+	    {
+		v->written = 1;
 		v->value = value;
+	    }
 	    else
 		list_free( value );
 	    break;
@@ -312,6 +331,8 @@ var_enter( const char *symbol )
 
 	v->symbol = symbol;
 	v->value = 0;
+	v->read = 0;
+	v->written = 0;
 
 	if( hashenter( varhash, (HASHDATA **)&v ) )
 	    v->symbol = newstr( symbol );	/* never freed */
@@ -332,6 +353,78 @@ var_dump(
 	printf( "%s %s = ", what, symbol );
 	list_print( value );
 	printf( "\n" );
+}
+
+int
+var_was_read( const char *symbol )
+{
+	VARIABLE var, *v = &var;
+
+	v->symbol = symbol;
+	if( varhash && hashcheck( varhash, (HASHDATA **)&v ) )
+	    return v->read;
+	return 0;
+}
+
+int
+var_was_written( const char *symbol )
+{
+	VARIABLE var, *v = &var;
+
+	v->symbol = symbol;
+	if( varhash && hashcheck( varhash, (HASHDATA **)&v ) )
+	    return v->written;
+	return 0;
+}
+
+static void
+var_clear_one( void *closure, HASHDATA *data )
+{
+	( (VARIABLE *)data )->written = 0;
+}
+
+/*
+ * var_clear_written() - forget which variables were written
+ *
+ * The parse-state cache calls this right before parsing starts, so
+ * that "written" afterwards means written BY the parse rather than by
+ * the environment import or -s option startup.
+ */
+
+void
+var_clear_written( void )
+{
+	if( varhash )
+	    hashiterate( varhash, var_clear_one, 0 );
+}
+
+/*
+ * var_iterate() - visit every variable in the symbol table
+ *
+ * Used by the parse-state cache to serialize global variables.
+ */
+
+typedef struct {
+	void	(*func)( void *closure, const char *symbol, LIST *value );
+	void	*closure;
+} VAR_ITER;
+
+static void
+var_iterate_one( void *closure, HASHDATA *data )
+{
+	VARIABLE *v = (VARIABLE *)data;
+	VAR_ITER *it = (VAR_ITER *)closure;
+	(*it->func)( it->closure, v->symbol, v->value );
+}
+
+void
+var_iterate( void (*func)( void *closure, const char *symbol, LIST *value ),
+	void *closure )
+{
+	VAR_ITER it;
+	it.func = func;
+	it.closure = closure;
+	hashiterate( varhash, var_iterate_one, &it );
 }
 
 /*

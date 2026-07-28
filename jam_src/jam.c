@@ -120,6 +120,7 @@
 # include "execcmd.h"
 # include "prof.h"
 # include "depcache.h"
+# include "statecache.h"
 
 /* Macintosh is "special" */
 
@@ -189,6 +190,8 @@ int main(int argc, char **argv, char **arg_environ)
 # endif
 
 	argc--, argv++;
+
+	statecache_note_argv( argc, argv, JAMBUILDSTR " " __DATE__ " " __TIME__ );
 
 #ifndef unix
   putenv("VS_UNICODE_OUTPUT="); // reset this var to prevent VS from capturing cl.exe output
@@ -374,14 +377,25 @@ int main(int argc, char **argv, char **arg_environ)
 	/* Initialize built-in rules */
 
 	load_builtins();
+	statecache_builtin_barrier();
 
-	/* Parse ruleset */
+	/* Parse ruleset -- or restore it from the parse-state cache */
 
 	PROF_ENTER( PROF_PARSE );
+
+	if( statecache_try_load() )
+	{
+	    /* JAMFILESRC/JAMTARGETS were part of the cached variable set;
+	     * the command line is validated by the cache manifest, so the
+	     * restored state matches what parsing would have produced. */
+	    goto parsed;
+	}
+
 	for( n = 0; s = getoptval( optv, 'f', n ); n++ )
 	{
   		LIST *l = L0;
   		var_set("JAMFILESRC", l = list_new( l, s, 0 ), VAR_APPEND);
+	    statecache_note_include( s, 1 );
 	    parse_file( s );
   }
 
@@ -391,6 +405,13 @@ int main(int argc, char **argv, char **arg_environ)
   		var_set("JAMFILESRC", l = list_new( l, "jamfile", 0 ), VAR_SET);
 	    parse_file( "+" );
   }
+	/* a parse that produced errors must not become a green cache:
+	 * the cached run would skip the diagnostics and exit OK */
+
+	if( !yyanyerrors() )
+	    statecache_save();
+
+    parsed:
 	PROF_LEAVE( PROF_PARSE );
 
 	status = yyanyerrors();

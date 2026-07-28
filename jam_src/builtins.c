@@ -44,6 +44,7 @@
 # include "hash.h"
 # include "prof.h"
 # include "fastre.h"
+# include "statecache.h"
 
 /*
  * compile_builtin() - define builtin rules
@@ -170,8 +171,22 @@ builtin_echo(
 	LOL	*args,
 	int	*jmp )
 {
-	list_print( lol_get( args, 0 ) );
+	LIST *l = lol_get( args, 0 );
+
+	/* Echo output produced while parsing is recorded and replayed
+	 * verbatim on a parse-state cache hit, so a cached run prints
+	 * exactly what a parsing run would. */
+
+	for( ; l; l = list_next( l ) )
+	{
+	    printf( "%s ", l->string );
+	    statecache_note_echo( l->string );
+	    statecache_note_echo( " " );
+	}
+
 	printf( "\n" );
+	statecache_note_echo( "\n" );
+
 	return L0;
 }
 
@@ -233,9 +248,12 @@ struct globbing {
 typedef struct globdir {
 	const char	*dir;		/* key */
 	LIST		*entries;	/* full paths, in scan order */
+	char		globbed;	/* listed by a real GLOB (not just
+					 * a manifest check) */
 } GLOBDIR ;
 
 static struct hash *globdirhash = 0;
+static unsigned globdirs_count = 0;
 
 static void
 builtin_glob_dirback(
@@ -302,7 +320,14 @@ builtin_glob(
 	    {
 		gd->dir = newstr( l->string );
 		gd->entries = L0;
+		gd->globbed = 0;
 		file_dirscan( l->string, builtin_glob_dirback, gd );
+	    }
+
+	    if( !gd->globbed )
+	    {
+		gd->globbed = 1;
+		globdirs_count++;
 	    }
 
 	    for( e = gd->entries; e; e = list_next( e ) )
@@ -312,6 +337,106 @@ builtin_glob(
 	PROF_LEAVE( PROF_GLOB );
 
 	return globbing.results;
+}
+
+/*
+ * GLOB directory-listing fingerprints for the parse-state cache
+ * (statecache.c) -- serialized and checked there, queried here.
+ *
+ * A cached parse is only valid while every directory GLOB read still
+ * has the same contents: a new or removed source file must invalidate
+ * it.  We record, per directory, the number of entries and an
+ * order-independent hash of their names (file_dirscan order is not
+ * guaranteed stable across runs).
+ */
+
+static unsigned
+globdirs_hash( LIST *entries, unsigned *count )
+{
+	unsigned h = 0, n = 0;
+
+	for( ; entries; entries = list_next( entries ), n++ )
+	{
+	    const char *s = entries->string;
+	    unsigned e = 5381u;
+	    while( *s )
+		e = ( e * 33u ) ^ (unsigned char)*s++;
+	    h += e;			/* commutative: order-independent */
+	}
+
+	*count = n;
+	return h;
+}
+
+unsigned
+globdirs_size( void )
+{
+	return globdirs_count;
+}
+
+typedef struct globiter {
+	void	(*func)( void *closure, const char *dir, unsigned hash,
+			unsigned nfiles );
+	void	*closure;
+} GLOBITER;
+
+static void
+globdirs_iterate_one( void *closure, HASHDATA *data )
+{
+	GLOBDIR *gd = (GLOBDIR *)data;
+	GLOBITER *it = (GLOBITER *)closure;
+	unsigned count;
+	unsigned h;
+
+	/* only directories a real GLOB listed belong in the manifest --
+	 * dirs scanned by a failed manifest CHECK must not widen the
+	 * next save's invalidation set */
+
+	if( !gd->globbed )
+	    return;
+
+	h = globdirs_hash( gd->entries, &count );
+	(*it->func)( it->closure, gd->dir, h, count );
+}
+
+void
+globdirs_iterate( void (*func)( void *closure, const char *dir,
+	unsigned hash, unsigned nfiles ), void *closure )
+{
+	GLOBITER it;
+
+	it.func = func;
+	it.closure = closure;
+
+	if( globdirhash )
+	    hashiterate( globdirhash, globdirs_iterate_one, &it );
+}
+
+/*
+ * globdir_current() - fingerprint of a directory's current listing,
+ * scanning it (and keeping the listing for later GLOBs) on first use.
+ */
+
+int
+globdir_current( const char *dir, unsigned *hash, unsigned *nfiles )
+{
+	GLOBDIR gdirent, *gd = &gdirent;
+
+	if( !globdirhash )
+	    globdirhash = hashinit( sizeof( GLOBDIR ), "glob dirs" );
+
+	gd->dir = dir;
+
+	if( hashenter( globdirhash, (HASHDATA **)&gd ) )
+	{
+	    gd->dir = newstr( dir );
+	    gd->entries = L0;
+	    gd->globbed = 0;	/* check-only until a real GLOB hits it */
+	    file_dirscan( dir, builtin_glob_dirback, gd );
+	}
+
+	*hash = globdirs_hash( gd->entries, nfiles );
+	return 1;
 }
 
 /*

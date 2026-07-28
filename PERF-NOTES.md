@@ -81,39 +81,89 @@ file on every run — jam has no equivalent of ninja's `.ninja_deps`.
    **regexp.h** — include guard. **prof.c/h** — optional `-DJAM_PROF`
    instrumentation build (per-phase timers/counters).
 
+7. **strrules.c** — C builtins for jBuild's hottest string/dep rules
+   (SplitStringsOnSpace, AddEscapesToMakeJamValidForWrite,
+   MakePath[List]Absolute, DepRulePlain/DepRuleDotDot), bit-exact with
+   the interpreted originals, quirks included.  Feature-detected via
+   `JAM_BUILTINS`; a jamfile definition still overrides the builtin.
+   See tests/strrules and tests/deprule.
+
+8. **statecache.c/h** — persistent parse-state cache: with
+   `JamStateCachePath` set, the whole post-parse state (variables,
+   rules, actions, targets, edges, settings) is serialized and
+   restored instead of re-reading the jamfiles, guarded by a manifest
+   (jam build id, command line, cwd, every jamfile mtime+size, every
+   NOCARE'd missing include, GLOB directory listings, and the env
+   value of every variable the parse read — including reads of unset
+   names).  Any anomaly falls back to a full parse.
+
+9. **graph pooling + interned binding** — with parsing cached,
+   building the graph itself dominated: ~2M edges per run, each a
+   `bindtarget()` hash over a 60+ character path plus a malloc.
+   `TARGETS` and `LIST` nodes are now bump-allocated from blocks
+   (neither is ever freed individually), and `bindtarget_interned()`
+   memoizes on the *address* of the newstr-interned name.
+   1.34 -> 0.96 s; make0 0.68 -> 0.36 s.
+
 ## Results (active_matter/prog, no-op, median of 3)
 
-| configuration | wall | graph phase |
-|---|---|---|
-| production jam.exe | **7.19 s** | 2.2 s |
-| new jam (drop-in, no cache var) | **3.92 s** (−46 %) | ~1.5 s |
-| new jam + `JamDepCachePath` | **3.18 s** (−56 %) | 0.8 s |
-| ninja on gen_ninja.py output | ~0.5 s | |
+All binaries interleaved on the same machine state:
 
-Incremental build (touch main.cpp → compile+link): works, graph 0.8 s.
+| configuration | wall |
+|---|---|
+| stock jam.exe | **7.31 s** |
+| main branch (drop-in, no variables set) | **3.97 s** |
+| + `JamDepCachePath` | 3.23 s |
+| + string/DepRule builtins (`string-builtins`) | 2.65 s |
+| + `JamStateCachePath` (`parse-state-cache`) | **1.34 s** |
+| ninja on gen_ninja.py output | 0.49 s |
+
+i.e. 5.5x faster than stock, and 2.7x ninja rather than 15x.
+Parse phase 5.19 -> 0.30 s; evaluate_rule 774k -> 19k calls;
+regexec 1.42M -> 10k.  Real incremental builds (touch main.cpp ->
+compile+link) work through both caches; graph phase 0.6 s.
 
 ## Validation
 
-- `JAM_FASTRE_CHECK=1` full run: 0 mismatches across ~1.4 M matches.
-- `jam -n -a` full command dump (141 691 lines) byte-identical to
-  production jam.exe, with and without the dep cache.
-- Touched force-included header (`dag_memBase.h`): production and new
-  jam (cache warm and cold) all report the same 5 019 targets to update.
-- Appended a dep line to a `.d` file: cache detects mtime change,
-  rescans, dump identical to a fresh-scan run; new dep takes effect.
+- `JAM_FASTRE_CHECK=1` full run: 0 mismatches across ~1.4M matches.
+- `jam -n -a` command dump (141708 lines) and `jam -n -dd` dependency
+  edge dump (889561 lines) byte-identical to stock jam.exe at every
+  commit, with every combination of caches cold/warm.
+- Touched force-included header (`dag_memBase.h`): stock and new jam
+  report the same 5019 targets to update.
+- Appended a dep line to a `.d`: rescanned, new dependency takes
+  effect.
+- State cache invalidation: editing a jamfile, editing a nested
+  include, adding a source file, deleting a source file, changing a
+  read environment variable and changing the command line each force
+  a reparse and reproduce a fresh parse exactly; unrelated
+  environment noise does not invalidate.
+- Truncated cache and 200 random corrupted bytes: fall back to a full
+  parse, identical output.
+- Builtins: 52-case corpus (tests/strrules) plus the DepRule edge rig
+  (tests/deprule); old jam.exe, new jam.exe, guarded and unguarded
+  jamfiles all agree.
 
-## What's left (the remaining ~3 s) — jBuild-side, not jam.exe
+## What's left (the remaining ~0.45 s over ninja)
 
-~2.6 s is jamfile interpretation, dominated by the digest machinery
-(`ProcessTargetDigest` runs its triple regex/list pass over every
-option token of all 604 lib targets on every invocation, even when
-nothing changed) plus generic rule-invocation overhead (774 k
-`evaluate_rule`). Options: skip digest work when the stored digest
-file is up-to-date, or move `SplitStringsOnSpace` /
-`AddEscapesToMakeJamValidForWrite` / `MakePathListAbsolute` into C
-builtins (each is a trivial string op done 100 k+ times via regex).
-That could bring jam to ~1.5 s; matching ninja's 0.5 s would need
-avoiding re-interpretation entirely (e.g. the gen_ninja.py flow).
+Profile with everything on (0.96 s wall): state-cache load 0.34 s,
+make0 0.36 s (bind/stat 0.17 s, of which file_dirscan 0.18 s across
+4534 directories; headers() 0.15 s), make1 0.05 s, the rest process
+startup/teardown.
+
+Remaining ideas, in rough value order:
+
+- **state-cache load (0.34 s)** - the format still interns every
+  string through `newstr()` and rebuilds lists node by node.  Storing
+  the string table as one blob and pointing into it (jam strings are
+  never freed) plus laying the restored lists out contiguously would
+  remove most of it.
+- **directory scanning (0.18 s)** - 4534 `FindFirstFileEx` walks.
+  Unavoidable for correctness, but they are independent and could run
+  on a small thread pool.
+- **teardown** - measured, not worth it: once the nodes are pooled,
+  skipping the exit frees changes nothing (0.950 vs 0.954 s), so that
+  change was dropped rather than kept on speculation.
 
 ## Build
 
