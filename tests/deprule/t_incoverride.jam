@@ -1,0 +1,56 @@
+# `Includes` override rig for the DepRule builtins.
+#
+# DepRulePlain/DepRuleDotDot inline the `Includes $(<) : $(changed) ;`
+# step instead of invoking the rule, but only while `Includes` is still
+# the builtin.  A jamfile may override it two different ways, and BOTH
+# must defeat the inlining:
+#
+#   -sMODE=proc    rule Includes { ... }     replaces the procedure
+#   -sMODE=act     actions Includes { ... }  leaves the procedure alone
+#                                            and adds an ACTION, which
+#                                            evaluate_rule() attaches
+#                                            before it ever looks at
+#                                            the procedure
+#   -sMODE=plain   no override: the inlined path
+#
+# Run from this directory with the jam binary under test:
+#
+#   jam -sMODE=plain -f t_incoverride.jam -n -dd 2>&1 \
+#     | grep -E '^Includes' | sort > out.txt && diff expected_inc_plain.txt out.txt
+#
+#   jam -sMODE=proc -f t_incoverride.jam -n -dd 2>&1 \
+#     | grep -E '^(OVR|Includes)' | sort > out.txt && diff expected_inc_proc.txt out.txt
+#
+#   jam -sMODE=act -f t_incoverride.jam -n -a 2>&1 \
+#     | grep 'OVR actions' > out.txt && diff expected_inc_act.txt out.txt
+#
+# MODE=proc must show the override's ECHO and NO inlined Includes edges.
+# MODE=act must show the action's command text -- an implementation that
+# tests only `Includes`'s procedure inlines this one away and prints
+# nothing, silently discarding the jamfile's action.
+
+Root = ../.. ;
+
+if $(MODE) = proc {
+  rule Includes
+  {
+    ECHO OVR rule $(<) : $(>) ;
+  }
+}
+
+if $(MODE) = act {
+  actions together Includes
+  {
+    OVR actions $(<)
+  }
+}
+
+actions together quietly updated null_action
+{
+}
+
+HDRSCAN on fake.d = "^[^ ]*: *([^\
+]*).*$" ;
+HDRRULE on fake.d = DepRulePlain ;
+
+Depends all : fake.d ;

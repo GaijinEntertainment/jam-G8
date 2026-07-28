@@ -26,3 +26,10 @@ inside `on $(dep)` scope).  `t_depruleplain.jam` is the same rig for
 `-sIMPL=interp` also proves that a jamfile-defined rule of that name
 still overrides the builtin, i.e. older build scripts keep their exact
 behavior on a newer jam.exe.
+
+`t_incoverride.jam` covers the other override the builtins must honor:
+`Includes` itself. The builtins inline that step, so both ways of
+overriding the rule have to defeat the inlining — `rule Includes` and
+`actions Includes`, the latter leaving the procedure untouched while
+`evaluate_rule()` attaches its ACTION regardless. Goldens
+`expected_inc_{plain,proc,act}.txt`, invocations in the file's header.
