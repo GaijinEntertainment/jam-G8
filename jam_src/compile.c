@@ -79,6 +79,7 @@
 # include "newstr.h"
 # include "search.h"
 # include "prof.h"
+# include "statecache.h"
 
 static const char *set_names[] = { "=", "+=", "?=" };
 static void debug_compile( int which, const char *s );
@@ -346,13 +347,24 @@ compile_include(
 	    /* Needn't copysettings(), as search sets no vars. */
 
 	    pushsettings( t->settings );
+	    statecache_include_search_begin();
 	    t->boundname = search( t->name, &t->time );
+	    statecache_include_search_end();
 	    popsettings( t->settings );
 
 	    /* Don't parse missing file if NOCARE set */
 
 	    if( t->time || !( t->flags & T_FLAG_NOCARE ) )
+	    {
+		statecache_note_include( t->boundname, 1 );
 		parse_file( t->boundname );
+	    }
+	    else
+	    {
+		/* record the miss too: the cached parse is only valid
+		 * while this file is still absent */
+		statecache_note_include( t->boundname, 0 );
+	    }
 	}
 
 	list_free( nt );

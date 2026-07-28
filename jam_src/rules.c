@@ -136,12 +136,67 @@ touchtarget( const char *t )
  */
 
 TARGETS *
-targetlist( 
+targetlist(
 	TARGETS	*chain,
 	LIST 	*targets )
 {
 	for( ; targets; targets = list_next( targets ) )
 	    chain = targetentry( chain, bindtarget( targets->string ) );
+
+	return chain;
+}
+
+/*
+ * bindtarget_interned() - bindtarget() memoized on string identity
+ *
+ * The dependency names fed to the graph come from newstr()-interned
+ * strings, so equal names share one address.  Hashing the string
+ * content again for every edge is the single most expensive thing
+ * about building a large graph (millions of 60+ character paths), and
+ * a direct-mapped memo on the pointer removes almost all of it.  A
+ * miss (or a non-interned string that happens to alias a slot) simply
+ * falls through to the regular lookup, so the result is always the
+ * same TARGET bindtarget() would return.
+ */
+
+# define BT_MEMO_BITS 14
+# define BT_MEMO_SLOTS ( 1 << BT_MEMO_BITS )
+
+static struct { const char *name; TARGET *t; } bt_memo[ BT_MEMO_SLOTS ];
+
+TARGET *
+bindtarget_interned( const char *targetname )
+{
+	unsigned i = (unsigned)( ( (size_t)targetname >> 4 ) * 2654435761u )
+	    & ( BT_MEMO_SLOTS - 1 );
+
+	if( bt_memo[i].name == targetname )
+	    return bt_memo[i].t;
+
+	{
+	    TARGET *t = bindtarget( targetname );
+
+	    /* memoize the TARGET's own interned name, never the caller's
+	     * pointer: interned strings are permanent, so a later pointer
+	     * match implies string identity */
+
+	    bt_memo[i].name = t->name;
+	    bt_memo[i].t = t;
+	    return t;
+	}
+}
+
+/*
+ * targetlist_interned() - targetlist() for interned name lists
+ */
+
+TARGETS *
+targetlist_interned(
+	TARGETS	*chain,
+	LIST 	*targets )
+{
+	for( ; targets; targets = list_next( targets ) )
+	    chain = targetentry( chain, bindtarget_interned( targets->string ) );
 
 	return chain;
 }
@@ -154,14 +209,34 @@ targetlist(
  *	target	new target to append
  */
 
+/*
+ * TARGETS nodes are never freed individually (the graph lives for the
+ * whole run), and large trees allocate millions of them - one per
+ * dependency edge.  Hand them out from bump-allocated blocks instead
+ * of calling malloc per node.
+ */
+
+# define TARGETS_BLOCK 8192
+
+static TARGETS *targets_pool;
+static int targets_pool_left;
+
 TARGETS *
-targetentry( 
+targetentry(
 	TARGETS	*chain,
 	TARGET	*target )
 {
 	TARGETS *c;
 
-	c = (TARGETS *)malloc( sizeof( TARGETS ) );
+	if( !targets_pool_left )
+	{
+	    targets_pool = (TARGETS *)malloc( TARGETS_BLOCK * sizeof( TARGETS ) );
+	    targets_pool_left = TARGETS_BLOCK;
+	}
+
+	c = targets_pool++;
+	targets_pool_left--;
+
 	c->target = target;
 
 	if( !chain ) chain = c;
@@ -347,6 +422,24 @@ freesettings( SETTINGS *v )
 
 	    v = n;
 	}
+}
+
+/*
+ * rules_iterate() / targets_iterate() - visit every RULE / TARGET
+ *
+ * Used by the parse-state cache to serialize the post-parse state.
+ */
+
+void
+rules_iterate( void (*func)( void *closure, void *data ), void *closure )
+{
+	hashiterate( rulehash, (void (*)( void *, HASHDATA * ))func, closure );
+}
+
+void
+targets_iterate( void (*func)( void *closure, void *data ), void *closure )
+{
+	hashiterate( targethash, (void (*)( void *, HASHDATA * ))func, closure );
 }
 
 /*

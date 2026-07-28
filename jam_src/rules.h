@@ -171,6 +171,8 @@ TARGET *bindtarget( const char *targetname );
 TARGET *copytarget( const TARGET *t );
 void 	touchtarget( const char *t );
 TARGETS *targetlist( TARGETS *chain, LIST  *targets );
+TARGET *bindtarget_interned( const char *targetname );
+TARGETS *targetlist_interned( TARGETS *chain, LIST *targets );
 TARGETS *targetentry( TARGETS *chain, TARGET *target );
 TARGETS *targetchain( TARGETS *chain, TARGETS *targets );
 ACTIONS *actionlist( ACTIONS *chain, ACTION *action );
@@ -180,3 +182,6 @@ void 	pushsettings( SETTINGS *v );
 void 	popsettings( SETTINGS *v );
 void 	freesettings( SETTINGS *v );
 void	donerules();
+/* iterate RULEs / TARGETs; `data` is a RULE * / TARGET * */
+void	rules_iterate( void (*func)( void *closure, void *data ), void *closure );
+void	targets_iterate( void (*func)( void *closure, void *data ), void *closure );

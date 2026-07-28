@@ -17,6 +17,7 @@
 # include "pathsys.h"
 # include "variable.h"
 # include "newstr.h"
+# include "statecache.h"
 
 const char *
 search( 
@@ -64,6 +65,10 @@ search(
 
 		if( *time )
 		    return newstr( buf );
+
+		/* candidate did not resolve: the parse-state cache must know
+		 * (a file appearing here later changes the resolution) */
+		statecache_note_search_miss( buf );
 
 		varlist = list_next( varlist );
 	    }

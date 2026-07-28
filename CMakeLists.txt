@@ -11,6 +11,7 @@ jam_src/changedPaths.c
     jam_src/fastre.c
     jam_src/depcache.c
     jam_src/strrules.c
+    jam_src/statecache.c
     jam_src/prof.c
 jam_src/command.c
 jam_src/compile.c

@@ -484,26 +484,84 @@ deprule_is_abs( const char *dep )
  * deprule_finish() - the shared rule tail:
  *     Includes $(<) : $(changed) ;
  *     null_action $(changed) ;
- * Both are invoked unconditionally, exactly like the interpreted
- * rules (an empty list still creates the target's includes node and
- * an empty action).  Takes ownership of `changed`.
+ *
+ * Both are performed inline rather than through evaluate_rule(): this
+ * runs once per scanned dependency file, and the two rule invocations
+ * (argument LOL setup, rule lookup, parse-tree dispatch, result list
+ * churn) cost more than the graph work itself.  The effect is
+ * identical to invoking them - builtin_depends() with parse->num set
+ * is exactly the loop below, and a rule with actions and no procedure
+ * only ever appends one ACTION to each target.
+ *
+ * `null_action` is looked up by name, so a jamfile is still free to
+ * redefine it; if it somehow has a procedure (the stock one is a bare
+ * `actions`), fall back to a real invocation so semantics hold.
+ *
+ * Takes ownership of `changed`.
  */
 
 static void
 deprule_finish( LOL *args, LIST *changed )
 {
-	LOL lol;
+	LIST	*targets = lol_get( args, 0 );
+	LIST	*l;
+	RULE	*na = bindrule( "null_action" );
+	RULE	*inc = bindrule( "Includes" );
 
-	lol_init( &lol );
-	lol_add( &lol, list_copy( L0, lol_get( args, 0 ) ) );
-	lol_add( &lol, list_copy( L0, changed ) );
-	list_free( evaluate_rule( "Includes", &lol, L0 ) );
-	lol_free( &lol );
+	/* Includes $(<) : $(changed) ; -- dispatched for real when a
+	 * jamfile overrode the builtin, inlined otherwise */
 
-	lol_init( &lol );
-	lol_add( &lol, changed );	/* ownership transferred */
-	list_free( evaluate_rule( "null_action", &lol, L0 ) );
-	lol_free( &lol );
+	if( inc->procedure )
+	{
+	    LOL lol;
+
+	    lol_init( &lol );
+	    lol_add( &lol, list_copy( L0, targets ) );
+	    lol_add( &lol, list_copy( L0, changed ) );
+	    list_free( evaluate_rule( "Includes", &lol, L0 ) );
+	    lol_free( &lol );
+	}
+	else for( l = targets; l; l = list_next( l ) )
+	{
+	    TARGET *t = bindtarget( l->string );
+
+	    if( !t->includes )
+		t->includes = copytarget( t );
+
+	    t->includes->depends =
+		targetlist_interned( t->includes->depends, changed );
+	}
+
+	/* null_action $(changed) ; */
+
+	if( na->procedure )
+	{
+	    LOL lol;
+
+	    lol_init( &lol );
+	    lol_add( &lol, changed );		/* ownership transferred */
+	    list_free( evaluate_rule( "null_action", &lol, L0 ) );
+	    lol_free( &lol );
+	    return;
+	}
+
+	if( na->actions )
+	{
+	    ACTION *action = (ACTION *)malloc( sizeof( ACTION ) );
+	    TARGETS *t;
+
+	    memset( (char *)action, '\0', sizeof( *action ) );
+	    action->rule = na;
+	    action->targets = targetlist_interned( (TARGETS *)0, changed );
+	    action->sources = targetlist( (TARGETS *)0, L0 );
+
+	    for( t = action->targets; t; t = t->next )
+		t->target->actions = actionlist( t->target->actions, action );
+	}
+	else
+	    printf( "warning: unknown rule %s\n", na->name );
+
+	list_free( changed );
 }
 
 /*

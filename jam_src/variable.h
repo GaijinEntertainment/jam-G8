@@ -16,6 +16,12 @@ LIST * 	var_get( const char *symbol );
 void 	var_set( const char *symbol, LIST *value, int flag );
 LIST * 	var_swap( const char *symbol, LIST *value );
 void 	var_done();
+void 	var_iterate( void (*func)( void *closure, const char *symbol, LIST *value ), void *closure );
+/* was the variable ever read via var_get()?  used by the parse-state cache */
+int 	var_was_read( const char *symbol );
+/* was it written by var_set() since var_clear_written()? */
+int 	var_was_written( const char *symbol );
+void 	var_clear_written( void );
 
 /*
  * Defines for var_set().
