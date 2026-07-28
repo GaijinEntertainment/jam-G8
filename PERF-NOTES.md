@@ -88,14 +88,18 @@ file on every run — jam has no equivalent of ninja's `.ninja_deps`.
    `JAM_BUILTINS`; a jamfile definition still overrides the builtin.
    See tests/strrules and tests/deprule.
 
-8. **statecache.c/h** — persistent parse-state cache: with
-   `JamStateCachePath` set, the whole post-parse state (variables,
-   rules, actions, targets, edges, settings) is serialized and
-   restored instead of re-reading the jamfiles, guarded by a manifest
-   (jam build id, command line, cwd, every jamfile mtime+size, every
-   NOCARE'd missing include, GLOB directory listings, and the env
-   value of every variable the parse read — including reads of unset
-   names).  Any anomaly falls back to a full parse.
+8. **statecache.c/h** — persistent parse-state cache, on by default:
+   the whole post-parse state (variables, rules, actions, targets,
+   edges, settings) is serialized and restored instead of re-reading
+   the jamfiles, guarded by a manifest (jam build id — compile stamp
+   + executable size/mtime + Jambase hash — command line, cwd, every
+   jamfile mtime+size, every NOCARE'd missing include, GLOB directory
+   listings, and the env value of every variable the parse read,
+   including reads of unset names).  Any anomaly falls back to a full
+   parse.  Unset `JamStateCachePath` = a per-(build id, cwd, argv)
+   slot under `%LOCALAPPDATA%\jam` / `$XDG_CACHE_HOME/jam` /
+   `~/.cache/jam`, age-pruned after 14 days; a path = that file;
+   empty or `none` = off.
 
 9. **graph pooling + interned binding** — with parsing cached,
    building the graph itself dominated: ~2M edges per run, each a

@@ -62,6 +62,7 @@
 # include <string.h>
 # include <sys/types.h>
 # include <sys/stat.h>
+# include <errno.h>
 
 # ifdef OS_NT
 # include <windows.h>
@@ -72,6 +73,7 @@
 # define sc_environ _environ
 # else
 # include <unistd.h>
+# include <dirent.h>
 # define sc_getcwd getcwd
 # define sc_getpid getpid
 extern char **environ;
@@ -124,6 +126,7 @@ static int  sc_argv_over = 0;	/* command line did not fit: disable */
 static const char *sc_jamver = "?";
 static int  sc_state = 0;	/* 0 unknown, -1 off, 1 armed */
 static int  sc_loaded = 0;	/* cache hit this run */
+static int  sc_explicit = 0;	/* the user named JamStateCachePath */
 static int  sc_sealed = 0;	/* parse over; stop recording reads */
 static long long sc_run_start;	/* racy-entry horizon (msig units) */
 static char sc_path[ 1024 ];
@@ -463,6 +466,88 @@ sc_env_current_value( const char *name )
 	return getenv( name );
 }
 
+/*
+ * sc_default_path() - where the cache lives when nobody named a file
+ *
+ * jam decides whether to use the cache BEFORE it reads a jamfile, so a
+ * jamfile cannot name it; all that exists at this point is the command
+ * line, the cwd and the environment.  So derive a slot in a per-user
+ * cache directory - never inside the source tree, which may be
+ * read-only or shared and is no place for a 10 MB build artifact.
+ *
+ * The name hashes (jam version, cwd, command line) purely so different
+ * projects and configurations do not fight over one slot.  It is NOT a
+ * validity key: the manifest inside the file re-checks all three
+ * explicitly, so a hash collision costs one cache miss and can never
+ * produce a wrong build.
+ */
+
+static int
+sc_mkdir( const char *path )
+{
+# ifdef OS_NT
+	return _mkdir( path ) == 0 || errno == EEXIST;
+# else
+	/* 0700: the cache is executed-as-trusted on the next run (its
+	 * action text goes straight to the shell), so nobody else gets
+	 * to write it - and nothing in it is worth sharing anyway */
+	return mkdir( path, 0700 ) == 0 || errno == EEXIST;
+# endif
+}
+
+static int
+sc_default_path( char *out, int size )
+{
+	const char *base;
+	const char *xdg = 0;
+	char dir[ 1024 ];
+	char cwd[ 1024 ];
+	unsigned h = 5381u;
+	const char *p;
+
+# ifdef OS_NT
+	/* LOCALAPPDATA only - no TEMP fallback: %TEMP% can resolve to a
+	 * machine-shared directory (services, C:\Windows\Temp), which is
+	 * no place for a file whose action text runs as-trusted later */
+	base = getenv( "LOCALAPPDATA" );
+# else
+	xdg = getenv( "XDG_CACHE_HOME" );
+	base = ( xdg && xdg[0] ) ? xdg : getenv( "HOME" );
+# endif
+
+	if( !base || !base[0] || strlen( base ) > sizeof( dir ) - 64 )
+	    return 0;
+
+# ifndef OS_NT
+	if( !( xdg && xdg[0] ) )
+	{
+	    sprintf( dir, "%s/.cache", base );
+	    if( !sc_mkdir( dir ) )
+		return 0;
+	    sprintf( dir, "%s/.cache/jam", base );
+	}
+	else
+# endif
+	sprintf( dir, "%s/jam", base );
+
+	if( !sc_mkdir( dir ) )
+	    return 0;
+
+	cwd[0] = 0;
+	if( !sc_getcwd( cwd, sizeof( cwd ) - 1 ) || !cwd[0] )
+	    return 0;
+
+	for( p = sc_jamver; *p; p++ ) h = ( h * 33u ) ^ (unsigned char)*p;
+	for( p = cwd; *p; p++ )       h = ( h * 33u ) ^ (unsigned char)*p;
+	for( p = sc_argv; *p; p++ )   h = ( h * 33u ) ^ (unsigned char)*p;
+
+	if( (int)strlen( dir ) + 24 >= size )
+	    return 0;
+
+	sprintf( out, "%s/%08x.jamstate", dir, h );
+	return 1;
+}
+
 static int
 sc_init( void )
 {
@@ -474,9 +559,18 @@ sc_init( void )
 	sc_state = -1;
 
 	var = var_get( "JamStateCachePath" );
-	if( !var || !var->string || !var->string[0] )
+
+	/* An explicitly EMPTY value is the opt-out: -sJamStateCachePath=
+	 * (or an empty environment entry) turns the cache off.  Windows
+	 * shells cannot express an empty environment variable (`set X=`
+	 * and `$env:X = ''` both DELETE it), so the literal value `none`
+	 * is an equivalent opt-out that survives any shell.  Unset means
+	 * "use the default slot" - see sc_default_path(). */
+
+	if( var && var->string
+	    && ( !var->string[0] || !strcmp( var->string, "none" ) ) )
 	    return 0;
-	if( strlen( var->string ) >= sizeof( sc_path ) )
+	if( var && var->string && strlen( var->string ) >= sizeof( sc_path ) )
 	    return 0;
 	if( sc_argv_over )
 	    return 0;	/* truncated command lines could alias */
@@ -490,7 +584,13 @@ sc_init( void )
 		return 0;
 	}
 
-	strcpy( sc_path, var->string );
+	if( var && var->string )
+	{
+	    strcpy( sc_path, var->string );
+	    sc_explicit = 1;
+	}
+	else if( !sc_default_path( sc_path, sizeof( sc_path ) ) )
+	    return 0;
 
 	sc_run_start = sc_now_msig();
 	sc_state = 1;
@@ -630,7 +730,11 @@ sc_scan_hdrrule_value( LIST *v )
 	    RULE *r = bindrule( v->string );
 	    if( r->procedure && !sc_is_builtin_proc( v->string, r->procedure ) )
 	    {
-		if( !sc_refuse )
+		/* Only nag when the cache was explicitly requested: with
+		 * the default slot this would fire on every build of a
+		 * tree whose jamfiles still define the rules themselves. */
+
+		if( !sc_refuse && ( sc_explicit || sc_debug() ) )
 		    fprintf( stderr, "jam: statecache: HDRRULE '%s' has an "
 			"interpreted body (or overrides a builtin)\n", v->string );
 		sc_refuse = 1;
@@ -957,6 +1061,112 @@ sc_write_manifest( SC_BUF *b )
 	buf_str( b, sc_echo ? sc_echo : "" );
 }
 
+/*
+ * sc_prune() - age out abandoned slots from the default cache dir
+ *
+ * Every (project, configuration) pair gets its own slot file and
+ * nothing ever comes back for slots of trees or configurations that
+ * stopped being built.  After a save into the DEFAULT directory
+ * (never an explicit path - that location belongs to the user),
+ * unlink sibling *.jamstate files untouched for 14 days.  Runs only
+ * on the save path, so warm no-op builds never pay the directory
+ * scan; a busy tree re-saves long before its own slot ages out.
+ *
+ * Bursts of distinct configurations can still accumulate inside the
+ * window; the bound here is age, not total size.
+ */
+
+# define SC_PRUNE_DAYS 14
+
+static void
+sc_prune( void )
+{
+	char dir[ 1024 ];
+	char victim[ 1200 ];
+	int dl;
+	const char *slash;
+	const char *bslash;
+
+	if( sc_explicit )
+	    return;
+
+	slash = strrchr( sc_path, '/' );
+	bslash = strrchr( sc_path, '\\' );
+	if( bslash > slash )
+	    slash = bslash;
+	if( !slash || slash - sc_path >= (int)sizeof( dir ) - 8 )
+	    return;
+
+	dl = (int)( slash - sc_path );
+	memcpy( dir, sc_path, dl );
+	dir[ dl ] = 0;
+
+# ifdef OS_NT
+	{
+	    WIN32_FIND_DATAA fd;
+	    HANDLE h;
+	    char pat[ 1100 ];
+	    unsigned long long now, cut;
+	    FILETIME ft;
+
+	    GetSystemTimeAsFileTime( &ft );
+	    now = ( (unsigned long long)ft.dwHighDateTime << 32 )
+		| ft.dwLowDateTime;
+	    cut = (unsigned long long)SC_PRUNE_DAYS * 24 * 3600
+		* 10000000ull;
+
+	    sprintf( pat, "%s\\*.jamstate", dir );
+
+	    h = FindFirstFileA( pat, &fd );
+	    if( h == INVALID_HANDLE_VALUE )
+		return;
+
+	    do
+	    {
+		unsigned long long wt =
+		    ( (unsigned long long)fd.ftLastWriteTime.dwHighDateTime
+			<< 32 ) | fd.ftLastWriteTime.dwLowDateTime;
+
+		if( wt && now > wt && now - wt > cut )
+		{
+		    sprintf( victim, "%s\\%.150s", dir, fd.cFileName );
+		    DeleteFileA( victim );
+		}
+	    }
+	    while( FindNextFileA( h, &fd ) );
+
+	    FindClose( h );
+	}
+# else
+	{
+	    DIR *d = opendir( dir );
+	    struct dirent *e;
+	    time_t cut = time( 0 ) - (time_t)SC_PRUNE_DAYS * 24 * 3600;
+
+	    if( !d )
+		return;
+
+	    while( ( e = readdir( d ) ) )
+	    {
+		size_t n = strlen( e->d_name );
+		struct stat st;
+
+		if( n < 9 || strcmp( e->d_name + n - 9, ".jamstate" ) )
+		    continue;
+		if( dl + 1 + (int)n >= (int)sizeof( victim ) )
+		    continue;
+
+		sprintf( victim, "%s/%s", dir, e->d_name );
+
+		if( !stat( victim, &st ) && st.st_mtime < cut )
+		    unlink( victim );
+	    }
+
+	    closedir( d );
+	}
+# endif
+}
+
 void
 statecache_save( void )
 {
@@ -1004,8 +1214,9 @@ statecache_save( void )
 	    for( i = sc_incs; i; i = i->next )
 		if( i->existed && !i->sig_ok )
 		{
-		    fprintf( stderr, "jam: statecache: cannot fingerprint "
-			"parsed input '%s'; state not cached\n", i->name );
+		    if( sc_explicit || sc_debug() )
+			fprintf( stderr, "jam: statecache: cannot fingerprint "
+			    "parsed input '%s'; state not cached\n", i->name );
 		    sc_refuse = 1;
 		}
 	}
@@ -1016,8 +1227,9 @@ statecache_save( void )
 	    RULE *inc = bindrule( "Includes" );
 	    if( inc->procedure && !sc_is_builtin_proc( inc->name, inc->procedure ) )
 	    {
-		fprintf( stderr, "jam: statecache: rule 'Includes' has an "
-		    "interpreted body (or overrides a builtin)\n" );
+		if( sc_explicit || sc_debug() )
+		    fprintf( stderr, "jam: statecache: rule 'Includes' has an "
+			"interpreted body (or overrides a builtin)\n" );
 		sc_refuse = 1;
 	    }
 	}
@@ -1025,8 +1237,9 @@ statecache_save( void )
 	    RULE *na = bindrule( "null_action" );
 	    if( na->procedure && !sc_is_builtin_proc( na->name, na->procedure ) )
 	    {
-		fprintf( stderr, "jam: statecache: rule 'null_action' has an "
-		    "interpreted body (or overrides a builtin)\n" );
+		if( sc_explicit || sc_debug() )
+		    fprintf( stderr, "jam: statecache: rule 'null_action' has an "
+			"interpreted body (or overrides a builtin)\n" );
 		sc_refuse = 1;
 	    }
 	}
@@ -1111,6 +1324,8 @@ statecache_save( void )
 
 	    free( payload.p );
 	}
+
+	sc_prune();
 
 	free( sc_strtab.p );
 	free( sc_body.p );

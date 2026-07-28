@@ -3,12 +3,10 @@
  *
  * Jam re-reads and re-interprets every jamfile on every invocation --
  * on dagor-sized trees that is seconds of pure re-derivation of a
- * rule/target graph that almost never changes.  When the variable
- * JamStateCachePath is set (via -s or the environment; it must be
- * known before parsing), jam serializes the complete post-parse state
- * (targets, dependency edges, actions, settings, rules, variables)
- * and on later runs restores it instead of parsing, provided nothing
- * that influenced parsing has changed:
+ * rule/target graph that almost never changes.  Jam serializes the
+ * complete post-parse state (targets, dependency edges, actions,
+ * settings, rules, variables) and on later runs restores it instead
+ * of parsing, provided nothing that influenced parsing has changed:
  *
  *   - the jam build id (compile stamp + executable size/mtime +
  *     Jambase hash) and the cache format version,
@@ -36,7 +34,22 @@
  * zero timestamp on warm runs; duplicated names inside the process
  * environment block may alias between getenv and the startup import.
  *
- * Unset JamStateCachePath = feature fully disabled, zero change.
+ * Where the cache lives - the variable JamStateCachePath (via -s or
+ * the environment; it must be known before parsing, so a jamfile
+ * cannot set it):
+ *
+ *   unset          default slot: a per-(build id, cwd, command line)
+ *                  file under %LOCALAPPDATA%\jam, $XDG_CACHE_HOME/jam
+ *                  or ~/.cache/jam.  Slots untouched for 14 days are
+ *                  pruned after a save.  If no cache directory can be
+ *                  derived, the feature quietly stays off.
+ *   a path         that file, exactly; the directory is the user's
+ *                  and is never pruned.  Refusal diagnostics print
+ *                  only for an explicit path (or JAM_SC_DEBUG=1) -
+ *                  whoever names a path gets told why it is not used.
+ *   empty / none   fully disabled, zero change.  `none` exists
+ *                  because Windows shells cannot express an empty
+ *                  environment variable (`set X=` deletes it).
  */
 
 #ifndef JAM_STATECACHE_H
