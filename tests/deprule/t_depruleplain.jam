@@ -1,0 +1,35 @@
+# DepRulePlain equivalence rig.  -sIMPL=builtin uses the C builtin,
+# -sIMPL=interp a verbatim copy of the interpreted msvc-cpp.jam DepRule.
+# Compare `-n -dd` output.
+
+Root = ../.. ;
+
+if $(IMPL) = interp {
+  rule DepRulePlain
+  {
+    local changed_dep = ;
+
+    for dep in $(>)
+    {
+      switch $(dep)
+      {
+        case ?:* : changed_dep += $(dep) ;
+        case \\* : changed_dep += $(dep) ;
+        case /*  : changed_dep += $(dep) ;
+        case *   : changed_dep += $(Root)/$(dep) ;
+      }
+    }
+    Includes $(<) : $(changed_dep) ;
+    null_action $(changed_dep) ;
+  }
+}
+
+actions together quietly updated null_action
+{
+}
+
+HDRSCAN on fake.d = "^[^ ]*: *([^\
+]*).*$" ;
+HDRRULE on fake.d = DepRulePlain ;
+
+Depends all : fake.d ;

@@ -1,0 +1,120 @@
+# Shared corpus: exercises SplitStringsOnSpace,
+# AddEscapesToMakeJamValidForWrite, MakePathAbsolute,
+# MakePathListAbsolute on edge cases.  Element boundaries are shown
+# one per line as <element>.
+
+rule DumpList # tag : list
+{
+  Echo ==== $(1) ;
+  for e in $(2) { Echo "<$(e)>" ; }
+  Echo ---- ;
+}
+
+# ---------------- SplitStringsOnSpace ----------------
+
+SSS_CASES =
+  "abc"
+  "abc def"
+  "abc def ghi"
+  "a b"
+  "x"
+  " leading"
+  "trailing "
+  "two  spaces"
+  "   "
+  "-Wl,-Map, out.map"
+  "--Map file.map"
+  "a"
+;
+
+local i = 1 ;
+for s in $(SSS_CASES) {
+  DumpList SSS_$(i) : [ SplitStringsOnSpace $(s) ] ;
+  i = $(i)1 ;
+}
+DumpList SSS_whole_list : [ SplitStringsOnSpace "aa bb" "cc" "dd ee" ] ;
+
+# ---------------- AddEscapesToMakeJamValidForWrite ----------------
+
+ESC_CASES =
+  "plain"
+  "a\"b"
+  "a\""
+  "\"a"
+  "a\\b"
+  "a\\"
+  "tail\"drop_tail"
+  "multi\"x\"y"
+  "\"\""
+  "\\\""
+  "a\"b\\c"
+  "-DVER=\"1.2\""
+;
+
+i = 1 ;
+for s in $(ESC_CASES) {
+  DumpList ESC_$(i) : [ AddEscapesToMakeJamValidForWrite $(s) ] ;
+  i = $(i)1 ;
+}
+DumpList ESC_whole_list : [ AddEscapesToMakeJamValidForWrite "a\"b" "plain" "x\\" ] ;
+
+# ---------------- MakePathAbsolute / MakePathListAbsolute ----------------
+
+MPA_PREFIX = "d:/dagor2/active_matter/prog" ;
+
+MPA_CASES =
+  "foo.lib"
+  "ws2_32.lib"
+  "/abs/path/x.a"
+  "d:/abs/win.lib"
+  "../x"
+  "../../_output/x"
+  "../../../x"
+  "../../../../x"
+  "../../../../../x"
+  "../../../../../../x"
+  "..foo/bar"
+  "../ui/x"
+  "../ab/cd/ef"
+  "../"
+  ".."
+  "../_output/foo"
+;
+
+i = 1 ;
+for s in $(MPA_CASES) {
+  DumpList MPA_$(i) : [ MakePathAbsolute $(MPA_PREFIX) : $(s) ] ;
+  i = $(i)1 ;
+}
+
+# short / relative / odd prefixes
+DumpList MPA_p1 : [ MakePathAbsolute "d:/a" : "../../x" ] ;
+DumpList MPA_p2 : [ MakePathAbsolute "d:/a" : "../../../x" ] ;
+DumpList MPA_p3 : [ MakePathAbsolute "d:" : "../x" ] ;
+DumpList MPA_p4 : [ MakePathAbsolute "rel/pfx" : "../../x" ] ;
+DumpList MPA_p5 : [ MakePathAbsolute "rel" : "../x" ] ;
+DumpList MPA_p6 : [ MakePathAbsolute "rel" : "../../x" ] ;
+DumpList MPA_p7 : [ MakePathAbsolute "d:/a/b/" : "../x" ] ;
+
+# multi-element suffix (first element decides the switch)
+DumpList MPA_m1 : [ MakePathAbsolute "d:/a/b" : "plain1" "plain2" ] ;
+
+DumpList MPLA_1 : [ MakePathListAbsolute "d:/dagor2/skyquake/prog" :
+  "../../_output/a.obj" "sys.lib" "../../_output/deep/b.obj" "/abs/c.obj" "..od/d.obj" ] ;
+DumpList MPLA_empty : [ MakePathListAbsolute "d:/a/b" : ] ;
+
+# ---------------- FOR-variable leak replication ----------------
+# compile_foreach leaves the loop variable bound to the last element;
+# the builtins replicate that (s for the string rules).
+
+s = keepA ;
+LEAKPROBE = [ SplitStringsOnSpace "aa bb" "cc" ] ;
+DumpList LEAK_SSS : $(s) ;
+s = keepB ;
+LEAKPROBE = [ SplitStringsOnSpace ] ;
+DumpList LEAK_SSS_EMPTY : $(s) ;
+s = keepC ;
+LEAKPROBE = [ AddEscapesToMakeJamValidForWrite "pl" "q\"z" ] ;
+DumpList LEAK_ESC : $(s) ;
+
+Echo CORPUS_DONE ;

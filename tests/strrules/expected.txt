@@ -1,0 +1,183 @@
+==== SSS_1 
+<abc> 
+---- 
+==== SSS_11 
+<c> 
+<def> 
+---- 
+==== SSS_111 
+<c> 
+<def ghi> 
+---- 
+==== SSS_1111 
+<a> 
+<b> 
+---- 
+==== SSS_11111 
+<x> 
+---- 
+==== SSS_111111 
+< leading> 
+---- 
+==== SSS_1111111 
+<g> 
+<> 
+---- 
+==== SSS_11111111 
+<o> 
+<spaces> 
+---- 
+==== SSS_111111111 
+<   > 
+---- 
+==== SSS_1111111111 
+<,> 
+<out.map> 
+---- 
+==== SSS_11111111111 
+<p> 
+<file.map> 
+---- 
+==== SSS_111111111111 
+<a> 
+---- 
+==== SSS_whole_list 
+<a> 
+<bb> 
+<cc> 
+<d> 
+<ee> 
+---- 
+==== ESC_1 
+<plain> 
+---- 
+==== ESC_11 
+<a\"> 
+---- 
+==== ESC_111 
+<a\"> 
+---- 
+==== ESC_1111 
+<\"> 
+---- 
+==== ESC_11111 
+<a\\> 
+---- 
+==== ESC_111111 
+<a\\> 
+---- 
+==== ESC_1111111 
+<tail\"> 
+---- 
+==== ESC_11111111 
+<multi\"x\"> 
+---- 
+==== ESC_111111111 
+<\"\"> 
+---- 
+==== ESC_1111111111 
+<\\\"> 
+---- 
+==== ESC_11111111111 
+<a\"b\\> 
+---- 
+==== ESC_111111111111 
+<-DVER=\"1.2\"> 
+---- 
+==== ESC_whole_list 
+<a\"> 
+<plain> 
+<x\\> 
+---- 
+==== MPA_1 
+<foo.lib> 
+---- 
+==== MPA_11 
+<ws2_32.lib> 
+---- 
+==== MPA_111 
+</abs/path/x.a> 
+---- 
+==== MPA_1111 
+<d:/abs/win.lib> 
+---- 
+==== MPA_11111 
+<d:/dagor2/active_matter/x> 
+---- 
+==== MPA_111111 
+<d:/dagor2/_output/x> 
+---- 
+==== MPA_1111111 
+<d://x> 
+---- 
+==== MPA_11111111 
+<d://x> 
+---- 
+==== MPA_111111111 
+<d://x> 
+---- 
+==== MPA_1111111111 
+<d://x> 
+---- 
+==== MPA_11111111111 
+<d:/dagor2/active_matter/prog/..foo/bar> 
+---- 
+==== MPA_111111111111 
+<d:/dagor2/x> 
+---- 
+==== MPA_1111111111111 
+<d://ef> 
+---- 
+==== MPA_11111111111111 
+<d:/dagor2/active_matter/prog/../> 
+---- 
+==== MPA_111111111111111 
+<d:/dagor2/active_matter/prog/..> 
+---- 
+==== MPA_1111111111111111 
+<d:/dagor2/active_matter/_output/foo> 
+---- 
+==== MPA_p1 
+<d://x> 
+---- 
+==== MPA_p2 
+<d://x> 
+---- 
+==== MPA_p3 
+</x> 
+---- 
+==== MPA_p4 
+</x> 
+---- 
+==== MPA_p5 
+</x> 
+---- 
+==== MPA_p6 
+</../x> 
+---- 
+==== MPA_p7 
+<d:/a/b/x> 
+---- 
+==== MPA_m1 
+<plain1> 
+<plain2> 
+---- 
+==== MPLA_1 
+<d:/dagor2/_output/a.obj> 
+<sys.lib> 
+<d:/dagor2/_output/deep/b.obj> 
+</abs/c.obj> 
+<d:/dagor2/skyquake/prog/..od/d.obj> 
+---- 
+==== MPLA_empty 
+---- 
+==== LEAK_SSS 
+<cc> 
+---- 
+==== LEAK_SSS_EMPTY 
+<keepB> 
+---- 
+==== LEAK_ESC 
+<q"z> 
+---- 
+CORPUS_DONE 

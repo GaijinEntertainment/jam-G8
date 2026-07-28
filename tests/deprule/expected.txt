@@ -1,0 +1,15 @@
+Depends "all" : "fake.d" ;
+Includes "fake.d" : "*" ;
+Includes "fake.d" : "../../" ;
+Includes "fake.d" : "../../.." ;
+Includes "fake.d" : "../../\rooted\r.h" ;
+Includes "fake.d" : "../../deep.h" ;
+Includes "fake.d" : "../../engine/x.h" ;
+Includes "fake.d" : "../../mix/m.h" ;
+Includes "fake.d" : "../../prog/y.h" ;
+Includes "fake.d" : "../../prog\z.h" ;
+Includes "fake.d" : "/rooted/s.h" ;
+Includes "fake.d" : "?:x" ;
+Includes "fake.d" : "OVR/sub1/./local/hdr.h" ;
+Includes "fake.d" : "OVR/sub2/./local/hdr.h" ;
+Includes "fake.d" : "c:/abs/a.h" ;

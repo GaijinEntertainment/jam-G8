@@ -111,9 +111,11 @@ load_builtins()
     bindrule( "NOUPDATE" )->procedure = 
 	parse_make( builtin_flags, P0, P0, P0, C0, C0, T_FLAG_NOUPDATE );
 
-    bindrule( "Temporary" )->procedure = 
-    bindrule( "TEMPORARY" )->procedure = 
+    bindrule( "Temporary" )->procedure =
+    bindrule( "TEMPORARY" )->procedure =
 	parse_make( builtin_flags, P0, P0, P0, C0, C0, T_FLAG_TEMP );
+
+    load_strrules();
 }
 
 /*

@@ -11,4 +11,5 @@
  */
 
 void load_builtins();
+void load_strrules();
 
