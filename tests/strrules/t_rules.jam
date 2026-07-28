@@ -1,0 +1,66 @@
+# Reference implementation: the rules exactly as defined in dagor's
+# prog/_jBuild/jBuild.jam and jCommonRules.jam, then the shared corpus.
+
+rule SplitStringsOnSpace # list
+{
+  local ret = ;
+  for s in $(1) {
+    local split = [ MATCH ([^\ ])+\ +(.*) : $(s) ] ;
+    if $(split) { ret += $(split[1]) $(split[2]) ; } else { ret += $(s) ; }
+  }
+  return $(ret) ;
+}
+
+rule AddEscapesToMakeJamValidForWrite # list
+{
+  local spec_sym = "\"\\" ;
+  local ret = ;
+  for s in $(1) {
+    local match_str = ([^$(spec_sym)]*)([$(spec_sym)])(.*) ;
+    local split = [ MATCH $(match_str) : $(s) ] ;
+    if ! $(split) { ret += $(s) ; continue ; }
+
+    local result = $(split[1]) ;
+    while $(split[2]) {
+      result += \\$(split[2]) ;
+      split = [ MATCH $(match_str) : $(split[3]) ] ;
+      result += $(split[1]) ;
+    }
+    ret += $(result:J) ;
+  }
+  return $(ret) ;
+}
+
+rule SimplifyComposedPath
+{
+  local prefix = $(1) ;
+  local suffix = $(2) ;
+  local rest = [ MATCH "^\.\.\/(.*)" : $(suffix) ] ;
+  while $(rest) && $(prefix) {
+    suffix = $(rest) ;
+    prefix = $(prefix:D) ;
+    rest = [ MATCH "^\.\.\/(.*)" : $(suffix) ] ;
+  }
+  return $(prefix)/$(suffix) ;
+}
+
+rule MakePathAbsolute prefix : suffix
+{
+  switch $(suffix) {
+    case ..* : return [ SimplifyComposedPath $(prefix) : $(suffix) ] ;
+  }
+  return $(suffix) ;
+}
+
+rule MakePathListAbsolute prefix : suffixList
+{
+  local result = ;
+  local suffix = ;
+
+  for suffix in $(suffixList) {
+    result += [ MakePathAbsolute $(prefix) : $(suffix) ] ;
+  }
+  return $(result) ;
+}
+
+include $(CORPUS) ;

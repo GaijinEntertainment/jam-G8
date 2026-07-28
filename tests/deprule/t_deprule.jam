@@ -1,0 +1,41 @@
+# DepRuleDotDot equivalence rig.  Run with -sIMPL=builtin to use the
+# C builtin, -sIMPL=interp to use a verbatim copy of the interpreted
+# clang-cpp.jam DepRule body.  Compare `-n -dd` output.
+
+Root = ../.. ;
+
+if $(IMPL) = interp {
+  rule DepRuleDotDot
+  {
+    local changed_dep = ;
+
+    for dep_full in $(>)
+    {
+      local dep = [ MATCH "(\\.\\.\/|\\.\\.\\\\)*(.*)" : $(dep_full) ] ;
+      dep = $(dep[2]) ;
+      switch $(dep)
+      {
+        case ?:* : changed_dep += $(dep) ;
+        case \\* : changed_dep += $(dep) ;
+        case /*  : changed_dep += $(dep) ;
+        case ./* : on $(dep) changed_dep += $(Root)/$(location_prefix)/$(dep) ;
+        case *   : changed_dep += $(Root)/$(dep) ;
+      }
+    }
+    Includes $(<) : $(changed_dep) ;
+    null_action $(changed_dep) ;
+  }
+}
+
+actions together quietly updated null_action
+{
+}
+
+location_prefix on ./local/hdr.h = sub1 sub2 ;
+Root on ./local/hdr.h = OVR ;   # on-target Root must win inside `on $(dep)`
+
+HDRSCAN on fake.d = "^[^ ]*: *([^\
+]*).*$" ;
+HDRRULE on fake.d = DepRuleDotDot ;
+
+Depends all : fake.d ;

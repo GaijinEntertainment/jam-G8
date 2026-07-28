@@ -1,0 +1,34 @@
+# Overrides must keep winning on a new jam: the interpreted rules
+# dispatch SimplifyComposedPath / MakePathAbsolute BY NAME, and the
+# builtins re-dispatch whenever the named rule has a procedure.
+# Historical jamfile shape: SimplifyComposedPath unguarded, the rest
+# guarded.
+
+rule SimplifyComposedPath { return CUSTOM_SCP ; }
+
+if ! MakePathAbsolute in $(JAM_BUILTINS) {
+  rule MakePathAbsolute prefix : suffix {
+    switch $(suffix) {
+      case ..* : return [ SimplifyComposedPath $(prefix) : $(suffix) ] ;
+    }
+    return $(suffix) ;
+  }
+}
+if ! MakePathListAbsolute in $(JAM_BUILTINS) {
+  rule MakePathListAbsolute prefix : suffixList {
+    local result = ;
+    local suffix = ;
+    for suffix in $(suffixList) {
+      result += [ MakePathAbsolute $(prefix) : $(suffix) ] ;
+    }
+    return $(result) ;
+  }
+}
+
+Echo O1 [ MakePathAbsolute d:/a : ../x ] ;
+Echo O2 [ MakePathListAbsolute d:/a : ../y plain ] ;
+Echo O3 [ MakePathAbsolute d:/a : plain2 ] ;
+
+rule MakePathAbsolute { return CUSTOM_MPA ; }
+Echo O4 [ MakePathListAbsolute d:/a : ../z ] ;
+Echo OVERRIDE_DONE ;
