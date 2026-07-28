@@ -27,6 +27,8 @@ PROFSLOT prof_slots[PROF_MAX] = {
 	{ "newstr" },
 	{ "hashitem" },
 	{ "make1" },
+	{ "  deprule xform" },
+	{ "  deprule finish" },
 };
 
 static double prof_freq;
