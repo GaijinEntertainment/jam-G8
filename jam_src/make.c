@@ -63,6 +63,7 @@
 # include "headers.h"
 # include "command.h"
 # include "changedPaths.h"
+# include "prof.h"
 
 # ifndef max
 # define max( a,b ) ((a)>(b)?(a):(b))
@@ -129,12 +130,14 @@ make(
 
 	memset( (char *)counts, 0, sizeof( *counts ) );
 
+	PROF_ENTER( PROF_MAKE0 );
 	for( i = 0; i < n_targets; i++ )
 	{
 	    TARGET *t = bindtarget( targets[i] );
 
 	    make0( t, 0, 0, counts, anyhow );
 	}
+	PROF_LEAVE( PROF_MAKE0 );
 	t1 = clock();
 
 	if( DEBUG_MAKE )
@@ -182,8 +185,10 @@ make(
 	    }
 	}
 
+	PROF_ENTER( PROF_MAKE1 );
 	for( i = 0; i < n_targets; i++ )
 	    status |= make1( bindtarget( targets[i] ) );
+	PROF_LEAVE( PROF_MAKE1 );
 
 	t2 = clock();
 	if (t2-t0 > CLOCKS_PER_SEC/10 && DEBUG_MAKE)
@@ -234,15 +239,19 @@ make0(
 
 	/* Step 2a: set "on target" variables. */
 
+	PROF_ENTER( PROF_COPYSET );
 	s = copysettings( t->settings );
 	pushsettings( s );
+	PROF_LEAVE( PROF_COPYSET );
 
 	/* Step 2b: find and timestamp the target file (if it's a file). */
 
 	if( t->binding == T_BIND_UNBOUND && !( t->flags & T_FLAG_NOTFILE ) )
 	{
+	    PROF_ENTER( PROF_SEARCH );
 	    t->boundname = search( t->name, &t->time );
 	    t->binding = t->time ? T_BIND_EXISTS : T_BIND_MISSING;
+	    PROF_LEAVE( PROF_SEARCH );
 	}
 
 	/* INTERNAL, NOTFILE header nodes have the time of their parents */
@@ -263,7 +272,11 @@ make0(
 	/* Step 2c: If its a file, search for headers. */
 
 	if( t->binding == T_BIND_EXISTS )
+	{
+	    PROF_ENTER( PROF_HEADERS );
 	    headers( t );
+	    PROF_LEAVE( PROF_HEADERS );
+	}
 
 	/* Step 2d: reset "on target" variables */
 

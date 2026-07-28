@@ -118,6 +118,8 @@
 # include "timestamp.h"
 # include "make.h"
 # include "execcmd.h"
+# include "prof.h"
+# include "depcache.h"
 
 /* Macintosh is "special" */
 
@@ -375,6 +377,7 @@ int main(int argc, char **argv, char **arg_environ)
 
 	/* Parse ruleset */
 
+	PROF_ENTER( PROF_PARSE );
 	for( n = 0; s = getoptval( optv, 'f', n ); n++ )
 	{
   		LIST *l = L0;
@@ -388,6 +391,7 @@ int main(int argc, char **argv, char **arg_environ)
   		var_set("JAMFILESRC", l = list_new( l, "jamfile", 0 ), VAR_SET);
 	    parse_file( "+" );
   }
+	PROF_LEAVE( PROF_PARSE );
 
 	status = yyanyerrors();
 
@@ -418,6 +422,7 @@ int main(int argc, char **argv, char **arg_environ)
 
 	/* Widely scattered cleanup */
 
+	depcache_done();
 	var_done();
 	donerules();
 	donestamps();
@@ -428,6 +433,10 @@ int main(int argc, char **argv, char **arg_environ)
 
 	if( globs.cmdout )
 	    fclose( globs.cmdout );
+
+#ifdef JAM_PROF
+	prof_dump();
+#endif
 
 	return status ? EXITBAD : EXITOK;
 }

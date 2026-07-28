@@ -29,6 +29,7 @@
 # include "jam.h"
 # include "newstr.h"
 # include "hash.h"
+# include "prof.h"
 
 typedef const char *STRING;
 
@@ -43,6 +44,8 @@ const char *
 newstr( const char *string )
 {
 	STRING str, *s = &str;
+
+	PROF_COUNT( PROF_NEWSTR );
 
 	if( !strhash )
 	    strhash = hashinit( sizeof( STRING ), "strings" );

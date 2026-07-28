@@ -46,6 +46,11 @@
 #include "regexp.h"
 #include <stdio.h>
 #include <ctype.h>
+#include "prof.h"
+#ifdef JAM_PROF
+#define regcomp jam_regcomp_impl
+#define regexec jam_regexec_impl
+#endif
 #ifndef ultrix
 #include <stdlib.h>
 #endif
@@ -1323,3 +1328,24 @@ regerror( const char *s )
 {
 	printf( "re error %s\n", s );
 }
+
+#ifdef JAM_PROF
+#undef regcomp
+#undef regexec
+regexp *regcomp( const char *exp )
+{
+	regexp *r;
+	PROF_ENTER( PROF_REGCOMP );
+	r = jam_regcomp_impl( exp );
+	PROF_LEAVE( PROF_REGCOMP );
+	return r;
+}
+int regexec( regexp *prog, const char *string )
+{
+	int rv;
+	PROF_ENTER( PROF_REGEXEC );
+	rv = jam_regexec_impl( prog, string );
+	PROF_LEAVE( PROF_REGEXEC );
+	return rv;
+}
+#endif

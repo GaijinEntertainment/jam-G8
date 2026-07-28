@@ -78,6 +78,7 @@
 # include "rules.h"
 # include "newstr.h"
 # include "search.h"
+# include "prof.h"
 
 static const char *set_names[] = { "=", "+=", "?=" };
 static void debug_compile( int which, const char *s );
@@ -530,10 +531,12 @@ compile_rule(
 LIST *
 evaluate_rule(
 	const char *rulename,
-	LOL	*args, 
+	LOL	*args,
 	LIST	*result )
 {
-	RULE	*rule = bindrule( rulename );
+	RULE	*rule;
+	PROF_ENTER( PROF_EVALRULE );
+	rule = bindrule( rulename );
 
 	if( DEBUG_COMPILE )
 	{
@@ -603,6 +606,7 @@ evaluate_rule(
 	if( DEBUG_COMPILE )
 	    debug_compile( -1, 0 );
 
+	PROF_LEAVE( PROF_EVALRULE );
 	return result;
 }
 

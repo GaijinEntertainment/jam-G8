@@ -39,9 +39,12 @@
 # include "headers.h"
 # include "newstr.h"
 # include "filesys.h"
+# include "prof.h"
+# include "fastre.h"
+# include "depcache.h"
 
-static LIST *headers1( const char *file, LIST *hdrscan );
-static LIST *headers1fs( const char *file, LIST *hdrscan );
+static LIST *headers1( const char *file, LIST *hdrscan, int *ok );
+static LIST *headers1fs( const char *file, LIST *hdrscan, int *ok );
 
 /*
  * headers() - scan a target for include files and call HDRRULE
@@ -71,13 +74,39 @@ headers( TARGET *t )
 	lol_init( &lol );
 
 	lol_add( &lol, list_new( L0, t->name, 1 ) );
-	if ( !hdr_full_scan )
-  	lol_add( &lol, headers1( t->boundname, hdrscan ) );
-  else
-  	lol_add( &lol, headers1fs( t->boundname, hdrscan ) );
+	PROF_ENTER( PROF_HDRSCAN1 );
+	{
+	    /* consult the persistent scan cache first (no-op unless   */
+	    /* JamDepCachePath is set); on a miss scan and record      */
+
+	    LIST *deps;
+
+	    if( !depcache_get( t, hdrscan, hdr_full_scan, &deps ) )
+	    {
+		int scan_ok;
+
+		deps = !hdr_full_scan
+		    ? headers1( t->boundname, hdrscan, &scan_ok )
+		    : headers1fs( t->boundname, hdrscan, &scan_ok );
+
+		/* a failed or short scan behaves as before (whatever was
+		 * read feeds HDRRULE), but must not become authoritative:
+		 * only a complete scan may enter the persistent cache */
+
+		if( scan_ok )
+		    depcache_put( t, hdrscan, hdr_full_scan, deps );
+	    }
+
+	    lol_add( &lol, deps );
+	}
+	PROF_LEAVE( PROF_HDRSCAN1 );
 
 	if( lol_get( &lol, 1 ) )
+	{
+	    PROF_ENTER( PROF_HDRRULE );
 	    list_free( evaluate_rule( hdrrule->string, &lol, L0 ) );
+	    PROF_LEAVE( PROF_HDRRULE );
+	}
 
 	/* Clean up */
 
@@ -89,49 +118,129 @@ headers( TARGET *t )
  */
 
 static LIST *
-headers1( 
+headers1(
 	const char *file,
-	LIST *hdrscan )
+	LIST *hdrscan,
+	int *ok )
 {
 	FILE	*f;
 	int	i;
 	int	rec = 0;
 	LIST	*result = 0;
-	regexp	*re[ MAXINC ];
+	const char *pat[ MAXINC ];
 	char	buf[ 1024 ];
+	char	*data, *p, *dend;
+	long	flen, got;
 	FILE_DECLARE_STOR_BUF(abs_name_stor);
 
-	if( !( f = fopen( FILE_SIMPLIFY_REL_PATH(file, abs_name_stor), "r" ) ) )
+	*ok = 0;
+
+	if( !( f = fopen( FILE_SIMPLIFY_REL_PATH(file, abs_name_stor), "rb" ) ) )
 	    return result;
 
 	while( rec < MAXINC && hdrscan )
 	{
-	    re[rec++] = regcomp( hdrscan->string );
+	    pat[rec++] = hdrscan->string;
 	    hdrscan = list_next( hdrscan );
 	}
 
-	while( fgets( buf, sizeof( buf ), f ) )
+	/* Read the whole file once instead of a million fgets calls.
+	 * Line delivery below replicates fgets exactly: lines split at
+	 * 1023 chars and, on NT only (where fopen "r" meant text mode),
+	 * "\r\n" -> "\n", lone '\r' kept, input stops at ^Z. */
+
+	fseek( f, 0, SEEK_END );
+	flen = ftell( f );
+	fseek( f, 0, SEEK_SET );
+
+	if( flen < 0 )
+	    { fclose( f ); return result; }
+
+	data = (char *)malloc( flen + 1 );
+	if( !data )
+	    { fclose( f ); return result; }
+
+	got = (long)fread( data, 1, flen, f );
+
+	/* complete only if everything there was read (a concurrent
+	 * truncation still counts: EOF was reached) -- the caller
+	 * refuses to cache incomplete scans */
+
+	*ok = !ferror( f ) && ( got == flen || feof( f ) );
+
+	fclose( f );
+	flen = got;
+	data[ flen ] = 0;
+
+# ifdef OS_NT
 	{
-	    for( i = 0; i < rec; i++ )
-		if( regexec( re[i], buf ) && re[i]->startp[1] )
+	    char *z = (char *)memchr( data, 0x1a, flen );
+	    if( z )
+		flen = (long)( z - data );
+	}
+# endif
+	dend = data + flen;
+
+	p = data;
+	while( p < dend )
+	{
+	    /* one fgets-equivalent chunk: up to '\n' or 1023 chars */
+
+	    char *nl = (char *)memchr( p, '\n', dend - p );
+	    char *lend = nl ? nl : dend;	/* points at '\n' or end */
+	    int clen = (int)( lend - p );	/* translated content len */
+	    int len;
+
+	    /* '\r' of a "\r\n" pair is dropped by text mode; lone '\r'
+	     * is kept.  Strip before the length check so a pair right
+	     * at the 1023 boundary behaves like fgets. */
+
+# ifdef OS_NT
+	    if( nl && clen && lend[-1] == '\r' )
+		clen--;
+# endif
+
+	    if( clen > 1022 )
 	    {
-		/* Copy and terminate extracted string. */
+		/* long line: fgets would return a full 1023-char chunk
+		 * with no newline; the "\r\n" pair is beyond it */
+		len = 1023;
+		memcpy( buf, p, len );
+		buf[ len ] = 0;
+		p += len;
+	    }
+	    else
+	    {
+		memcpy( buf, p, clen );
+		len = clen;
+		if( nl )
+		    buf[ len++ ] = '\n';
+		buf[ len ] = 0;
+		p = nl ? nl + 1 : dend;
+	    }
 
-		char buf2[ MAXSYM ];
-		int l = re[i]->endp[1] - re[i]->startp[1];
-		memcpy( buf2, re[i]->startp[1], l );
-		buf2[ l ] = 0;
-		result = list_new( result, buf2, 0 );
+	    for( i = 0; i < rec; i++ )
+	    {
+		int matched;
+		regexp *re = re_match( pat[i], buf, &matched );
 
-		if( DEBUG_HEADER )
-		    printf( "header found: %s\n", buf2 );
+		if( re && matched && re->startp[1] )
+		{
+		    /* Copy and terminate extracted string. */
+
+		    char buf2[ MAXSYM ];
+		    int l = re->endp[1] - re->startp[1];
+		    memcpy( buf2, re->startp[1], l );
+		    buf2[ l ] = 0;
+		    result = list_new( result, buf2, 0 );
+
+		    if( DEBUG_HEADER )
+			printf( "header found: %s\n", buf2 );
+		}
 	    }
 	}
 
-	while( rec )
-	    free( (char *)re[--rec] );
-
-	fclose( f );
+	free( data );
 
 	return result;
 }
@@ -141,33 +250,45 @@ headers1(
  */
 
 static LIST *
-headers1fs( 
+headers1fs(
 	const char *file,
-	LIST *hdrscan )
+	LIST *hdrscan,
+	int *ok )
 {
 	FILE	*f;
 	int	i;
 	int	rec = 0;
 	LIST	*result = 0;
-	regexp	*re[ MAXINC ];
+	const char *pat[ MAXINC ];
 	char	*buf, *pbuf;
-	int len, found;
+	int len, want, found;
 	FILE_DECLARE_STOR_BUF(abs_name_stor);
+
+	*ok = 0;
 
 	if( !( f = fopen( FILE_SIMPLIFY_REL_PATH(file, abs_name_stor), "r" ) ) )
 	    return result;
 
 	while( rec < MAXINC && hdrscan )
 	{
-	    re[rec++] = regcomp( hdrscan->string );
+	    pat[rec++] = hdrscan->string;
 	    hdrscan = list_next( hdrscan );
 	}
 
 	fseek ( f, 0, SEEK_END );
-	len = ftell ( f );
+	want = ftell ( f );
 	fseek ( f, 0, SEEK_SET );
-	buf = malloc ( len + 16 );
-	len = (int)fread ( buf, 1, len, f );
+	if( want < 0 )
+	    { fclose( f ); return result; }
+	buf = malloc ( want + 16 );
+	if( !buf )
+	    { fclose( f ); return result; }
+	len = (int)fread ( buf, 1, want, f );
+
+	/* text mode shrinks CRLF, so "read it all" means EOF reached */
+
+	*ok = !ferror( f ) && ( len == want || feof( f ) );
+
 	buf[len] = '\0';
 	fclose ( f );
 
@@ -179,27 +300,29 @@ headers1fs(
 	{
 	  found = 0;
     for( i = 0; i < rec; i++ )
-  		if( regexec( re[i], pbuf ) && re[i]->startp[1] )
+    {
+  		int matched;
+  		regexp *re = re_match( pat[i], pbuf, &matched );
+
+  		if( re && matched && re->startp[1] )
 	    {
     		/* Copy and terminate extracted string. */
 
     		char buf2[ MAXSYM ];
-    		int l = re[i]->endp[1] - re[i]->startp[1];
-    		memcpy( buf2, re[i]->startp[1], l );
+    		int l = re->endp[1] - re->startp[1];
+    		memcpy( buf2, re->startp[1], l );
     		buf2[ l ] = 0;
     		result = list_new( result, buf2, 0 );
 
-    		pbuf = (char*)re[i]->endp[1];
+    		pbuf = (char*)re->endp[1];
     		if( DEBUG_HEADER )
     		    printf( "header found: %s (%d char left)\n", buf2, (int)(buf+len-pbuf));
     		found = 1;
     		break;
 	    }
+    }
 	}
 	free ( buf );
-
-	while( rec )
-	    free( (char *)re[--rec] );
 
 	return result;
 }
