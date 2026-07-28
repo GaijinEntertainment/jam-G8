@@ -8,6 +8,9 @@ find_package(Threads REQUIRED)
 file(GLOB_RECURSE SRCS
 jam_src/builtins.c
 jam_src/changedPaths.c
+    jam_src/fastre.c
+    jam_src/depcache.c
+    jam_src/prof.c
 jam_src/command.c
 jam_src/compile.c
 jam_src/expand.c

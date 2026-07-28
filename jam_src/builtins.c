@@ -41,6 +41,9 @@
 # include "newstr.h"
 # include "regexp.h"
 # include "pathsys.h"
+# include "hash.h"
+# include "prof.h"
+# include "fastre.h"
 
 /*
  * compile_builtin() - define builtin rules
@@ -212,6 +215,12 @@ builtin_flags(
 
 /*
  * builtin_globbing() - GLOB rule
+ *
+ * Directory listings are memoized: dagor's AutoscanBuildLists globs
+ * the same source directories several times (once per file pattern),
+ * and every scan used to hit the OS again.  The filesystem is not
+ * modified during parsing (actions only run in make1), so one listing
+ * per directory per run is equivalent.
  */
 
 struct globbing {
@@ -219,14 +228,29 @@ struct globbing {
 	LIST	*results;
 } ;
 
+typedef struct globdir {
+	const char	*dir;		/* key */
+	LIST		*entries;	/* full paths, in scan order */
+} GLOBDIR ;
+
+static struct hash *globdirhash = 0;
+
 static void
-builtin_glob_back(
+builtin_glob_dirback(
 	void	*closure,
 	const char *file,
 	int	status,
 	time_t	time )
 {
-	struct globbing *globbing = (struct globbing *)closure;
+	GLOBDIR *gd = (GLOBDIR *)closure;
+	gd->entries = list_new( gd->entries, file, 0 );
+}
+
+static void
+builtin_glob_match(
+	struct globbing *globbing,
+	const char *file )
+{
 	LIST		*l;
 	PATHNAME	f;
 	char		buf[ MAXJPATH ];
@@ -260,8 +284,30 @@ builtin_glob(
 	globbing.results = L0;
 	globbing.patterns = r;
 
+	PROF_ENTER( PROF_GLOB );
+
+	if( !globdirhash )
+	    globdirhash = hashinit( sizeof( GLOBDIR ), "glob dirs" );
+
 	for( ; l; l = list_next( l ) )
-	    file_dirscan( l->string, builtin_glob_back, &globbing );
+	{
+	    GLOBDIR gdirent, *gd = &gdirent;
+	    LIST *e;
+
+	    gd->dir = l->string;
+
+	    if( hashenter( globdirhash, (HASHDATA **)&gd ) )
+	    {
+		gd->dir = newstr( l->string );
+		gd->entries = L0;
+		file_dirscan( l->string, builtin_glob_dirback, gd );
+	    }
+
+	    for( e = gd->entries; e; e = list_next( e ) )
+		builtin_glob_match( &globbing, e->string );
+	}
+
+	PROF_LEAVE( PROF_GLOB );
 
 	return globbing.results;
 }
@@ -279,40 +325,45 @@ builtin_match(
 	LIST *l, *r;
 	LIST *result = 0;
 
+	PROF_ENTER( PROF_MATCH );
+
 	/* For each pattern */
 
 	for( l = lol_get( args, 0 ); l; l = l->next )
 	{
-	    regexp *re = regcomp( l->string );
-
 	    /* For each string to match against */
 
 	    for( r = lol_get( args, 1 ); r; r = r->next )
-		if( regexec( re, r->string ) )
 	    {
-		int i, top;
+		int matched;
+		regexp *re = re_match( l->string, r->string, &matched );
 
-		/* Find highest parameter */
-
-		for( top = NSUBEXP; top-- > 1; )
-		    if( re->startp[top] )
-			break;
-
-		/* And add all parameters up to highest onto list. */
-		/* Must have parameters to have results! */
-
-		for( i = 1; i <= top; i++ )
+		if( re && matched )
 		{
-		    char buf[ MAXSYM ];
-		    int l = re->endp[i] - re->startp[i];
-		    memcpy( buf, re->startp[i], l );
-		    buf[ l ] = 0;
-		    result = list_new( result, buf, 0 );
+		    int i, top;
+
+		    /* Find highest parameter */
+
+		    for( top = NSUBEXP; top-- > 1; )
+			if( re->startp[top] )
+			    break;
+
+		    /* And add all parameters up to highest onto list. */
+		    /* Must have parameters to have results! */
+
+		    for( i = 1; i <= top; i++ )
+		    {
+			char buf[ MAXSYM ];
+			int l = re->endp[i] - re->startp[i];
+			memcpy( buf, re->startp[i], l );
+			buf[ l ] = 0;
+			result = list_new( result, buf, 0 );
+		    }
 		}
 	    }
-
-	    free( (char *)re );
 	}
+
+	PROF_LEAVE( PROF_MATCH );
 
 	return result;
 }

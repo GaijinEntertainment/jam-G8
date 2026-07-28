@@ -24,6 +24,7 @@
 
 # include "jam.h"
 # include "hash.h"
+# include "prof.h"
 
 /* Header attached to all data items entered into a hash table. */
 
@@ -107,12 +108,14 @@ hashitem(
 
 	keyval = *b;
 
+	PROF_COUNT( PROF_HASH );
+
 	while( *b )
 		keyval = keyval * 2147059363 + *b++;
 
 	base = hp->tab.base + ( keyval % hp->tab.nel );
 
-	for( i = *base; i; i = i->hdr.next )
+	for( i = *base; i; i = i->hdr.next, PROF_AUX( PROF_HASH, 1 ) )
 	    if( keyval == i->hdr.keyval && 
 		!strcmp( i->data.key, (*data)->key ) )
 	{
@@ -201,6 +204,35 @@ hashinit(
 	hp->name = name;
 
 	return hp;
+}
+
+/*
+ * hashiterate() - call func for every item in the table
+ */
+
+void
+hashiterate( struct hash *hp,
+	void (*func)( void *closure, HASHDATA *data ),
+	void *closure )
+{
+	int list;
+
+	if( !hp )
+	    return;
+
+	for( list = 0; list <= hp->items.list; list++ )
+	{
+	    int nel = hp->items.lists[ list ].nel;
+	    char *next = hp->items.lists[ list ].base;
+
+	    /* the newest list is only partially filled */
+
+	    if( list == hp->items.list )
+		nel -= hp->items.more;
+
+	    for( ; nel-- > 0; next += hp->items.size )
+		(*func)( closure, &( (ITEM *)next )->data );
+	}
 }
 
 /*

@@ -7,6 +7,9 @@
  * 11/04/02 (seiwald) - const-ing for string literals
  */
 
+#ifndef JAM_REGEXP_H
+#define JAM_REGEXP_H
+
 #define NSUBEXP  10
 typedef struct regexp {
 	const char *startp[NSUBEXP];
@@ -27,3 +30,5 @@ void regerror( const char *s );
  * number; the start node begins in the second byte.
  */
 #define	MAGIC	0234
+
+#endif /* JAM_REGEXP_H */

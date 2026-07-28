@@ -35,6 +35,7 @@
 # include "expand.h"
 # include "pathsys.h"
 # include "newstr.h"
+# include "prof.h"
 
 typedef struct {
 	PATHNAME	f;		/* :GDBSMR -- pieces */
@@ -80,6 +81,8 @@ var_expand(
 	char *ov;		/* for temp copy of variable in outbuf */
 	int depth;
 
+	PROF_ENTER( PROF_VAREXPAND );
+
 	if( DEBUG_VAREXP )
 	    printf( "expand '%.*s'\n", (int)(end - in), in );
 
@@ -91,10 +94,12 @@ var_expand(
 	    {
 	    case '1':
 	    case '<':
+		PROF_LEAVE( PROF_VAREXPAND );
 		return list_copy( l, lol_get( lol, 0 ) );
 
 	    case '2':
 	    case '>':
+		PROF_LEAVE( PROF_VAREXPAND );
 		return list_copy( l, lol_get( lol, 1 ) );
 	    }
 	}
@@ -113,6 +118,7 @@ var_expand(
 
 	*out = '\0';
 
+	PROF_LEAVE( PROF_VAREXPAND );
 	if( cancopyin )
 	    return list_new( l, inp, 1 );
 	else
@@ -338,6 +344,8 @@ var_expand(
 		list_free( variables );
 	    if( remainder)
 		list_free( remainder );
+
+	    PROF_LEAVE( PROF_VAREXPAND );
 
 	    if( DEBUG_VAREXP )
 	    {
