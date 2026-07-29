@@ -324,11 +324,19 @@ make_path_absolute_one( LIST *out, LIST *prefix, const char *suffix )
 
 /*
  * SimplifyComposedPath as a callable builtin.  The interpreted
- * MakePathAbsolute dispatches to SimplifyComposedPath BY NAME, so a
- * jamfile override must keep working: the builtins below re-dispatch
- * through evaluate_rule whenever the named rule has an interpreted
- * procedure (old unguarded jamfiles), and inline only when it does
- * not (guarded jamfiles / no override).
+ * MakePathAbsolute dispatches to SimplifyComposedPath BY NAME (and
+ * MakePathListAbsolute to MakePathAbsolute), so a jamfile override
+ * must keep working: the builtins below re-dispatch through
+ * evaluate_rule.  load_strrules() gives every one of these rule
+ * names a procedure, and an override merely replaces it, so the
+ * ->procedure tests below are always true and the builtins ALWAYS
+ * dispatch: into the override when one is defined, back into the
+ * sibling builtin otherwise.  The per-element loops behind the
+ * tests are an unreachable safety net, not an equivalent inline
+ * path, and must not replace the dispatch: a multi-element ..*
+ * suffix is fed to SimplifyComposedPath as a whole list
+ * ([ MakePathAbsolute p : ../a b ] -> "/a p/b"), while the loop
+ * switches per element ("/a b").
  */
 
 static LIST *
