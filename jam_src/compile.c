@@ -560,7 +560,16 @@ evaluate_rule(
 	/* Check traditional targets $(<) and sources $(>) */
 
 	if( !rule->actions && !rule->procedure )
+	{
 	    printf( "warning: unknown rule %s\n", rule->name );
+
+	    /* part of the parse's stdout transcript: a state-cache hit
+	     * must replay this line just like it replays ECHO output */
+
+	    statecache_note_echo( "warning: unknown rule " );
+	    statecache_note_echo( rule->name );
+	    statecache_note_echo( "\n" );
+	}
 
 	/* If this rule will be executed for updating the targets */
 	/* then construct the action for make(). */

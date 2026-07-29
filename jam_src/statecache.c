@@ -55,6 +55,7 @@
 # include "builtins.h"
 # include "changedPaths.h"
 # include "statecache.h"
+# include "jambase.h"
 
 # include <stdio.h>
 # include <stdlib.h>
@@ -75,6 +76,10 @@
 # define sc_getpid getpid
 extern char **environ;
 # define sc_environ environ
+# endif
+
+# ifdef __APPLE__
+# include <mach-o/dyld.h>
 # endif
 
 # define SC_FORMAT	2u
@@ -126,6 +131,76 @@ static char sc_path[ 1024 ];
 static struct hash *sc_builtinrules;
 typedef struct sc_name { const char *name; PARSE *proc; } SC_NAME;
 
+/*
+ * sc_binid() - build id that identifies the running BINARY
+ *
+ * The caller's JAMBUILDSTR " " __DATE__ " " __TIME__ stamps only
+ * jam.c's last compile: relinking after a change to jambase.c,
+ * builtins.c, strrules.c, ... leaves it unchanged, and a cache
+ * validated against it alone would keep replaying the OLD binary's
+ * parse - a wrong graph that never self-heals.  Append the
+ * executable's size+mtime (the same currency the manifest uses to
+ * validate jamfiles) and a hash of the compiled-in Jambase text as a
+ * guard for mtime-normalizing installs.
+ *
+ * Platforms without a way to locate the executable (readlink on a
+ * non-Linux Unix) fall back to size/mtime -1.-1; the compile stamp
+ * and the Jambase hash still invalidate on any jam.c/Jambase change.
+ */
+
+static char sc_binid_buf[ 320 ];
+
+static void
+sc_binid( const char *jamver )
+{
+	unsigned jb = 5381;
+	char **line;
+	const char *s;
+	long long sz = -1, mt = -1;
+	char exe[ 1024 ];
+
+	for( line = jambase; *line; line++ )
+	    for( s = *line; *s; s++ )
+		jb = jb * 33 + (unsigned char)*s;
+
+	exe[ 0 ] = 0;
+
+# ifdef OS_NT
+	if( !GetModuleFileNameA( NULL, exe, sizeof( exe ) ) )
+	    exe[ 0 ] = 0;
+# elif defined( __APPLE__ )
+	{
+	    uint32_t n = (uint32_t)sizeof( exe );
+
+	    if( _NSGetExecutablePath( exe, &n ) )
+		exe[ 0 ] = 0;
+	}
+# else
+	{
+	    int n = (int)readlink( "/proc/self/exe", exe, sizeof( exe ) - 1 );
+
+	    if( n > 0 )
+		exe[ n ] = 0;
+	    else
+		exe[ 0 ] = 0;
+	}
+# endif
+
+	if( exe[ 0 ] )
+	{
+	    struct stat st;
+
+	    if( !stat( exe, &st ) )
+	    {
+		sz = (long long)st.st_size;
+		mt = (long long)st.st_mtime;
+	    }
+	}
+
+	sprintf( sc_binid_buf, "%.200s bin=%lld.%lld jb=%08x",
+	    jamver, sz, mt, jb );
+}
+
 void
 statecache_note_argv( int argc, char **argv, const char *jamver )
 {
@@ -133,7 +208,8 @@ statecache_note_argv( int argc, char **argv, const char *jamver )
 	char *w = sc_argv;
 	char *end = sc_argv + sizeof( sc_argv ) - 2;
 
-	sc_jamver = jamver;
+	sc_binid( jamver );
+	sc_jamver = sc_binid_buf;
 
 	for( i = 0; i < argc; i++ )
 	{

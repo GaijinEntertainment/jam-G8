@@ -10,7 +10,8 @@
  * and on later runs restores it instead of parsing, provided nothing
  * that influenced parsing has changed:
  *
- *   - the jam binary version and format version,
+ *   - the jam build id (compile stamp + executable size/mtime +
+ *     Jambase hash) and the cache format version,
  *   - the full command line,
  *   - the environment block (hashed),
  *   - every jamfile read (mtime+size) and every include attempt that
@@ -24,9 +25,10 @@
  * Volatile variables (JAMDATE, JAMUNAME) are not restored from the
  * cache; they keep the values computed at startup.
  *
- * A cache hit replays the parse's ECHO output verbatim; parse-phase
- * -d debug tracing and warnings (including a missing include's
- * perror) are produced only by a real parse.
+ * A cache hit replays the parse's stdout transcript (ECHO output and
+ * `warning: unknown rule` lines) verbatim; parse-phase -d debug
+ * tracing and a missing include's perror are produced only by a real
+ * parse.
  *
  * Known limitations, all pathological: values DERIVED from volatile
  * variables at parse time (STAMP = $(JAMDATE)) are frozen at the
@@ -60,7 +62,8 @@ void statecache_note_search_miss( const char *path );
  * environment later (called by var_get) */
 void statecache_note_varmiss( const char *symbol );
 
-/* record parse-time ECHO output, replayed verbatim on a cache hit */
+/* record parse-time stdout transcript text (ECHO output, warning
+ * lines), replayed verbatim on a cache hit */
 void statecache_note_echo( const char *text );
 
 /* snapshot the set of rules that exist right after load_builtins();
