@@ -104,7 +104,7 @@ headers( TARGET *t )
 	if( lol_get( &lol, 1 ) )
 	{
 	    PROF_ENTER( PROF_HDRRULE );
-	    list_free( evaluate_rule( hdrrule->string, &lol, L0 ) );
+	    list_free( evaluate_rule( 0, hdrrule->string, &lol, L0 ) );
 	    PROF_LEAVE( PROF_HDRRULE );
 	}
 

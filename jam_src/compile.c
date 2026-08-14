@@ -528,7 +528,7 @@ compile_rule(
 	/* Run rules, appending results from each */
 
 	for( l = ll; l; l = list_next( l ) )
-	    result = evaluate_rule( l->string, nargs, result );
+	    result = evaluate_rule( parse, l->string, nargs, result );
 
 	list_free( ll );
 	lol_free( nargs );
@@ -542,6 +542,7 @@ compile_rule(
 
 LIST *
 evaluate_rule(
+	PARSE *parent_parse,
 	const char *rulename,
 	LOL	*args,
 	LIST	*result )
@@ -590,6 +591,9 @@ evaluate_rule(
 	if( rule->procedure )
 	{
 	    PARSE *parse = rule->procedure;
+	    int parse_had_no_src = parse->src_file == 0 && parent_parse;
+	    if (parse_had_no_src)
+  	    parse->src_file = parent_parse->src_file, parse->src_line = parent_parse->src_line;
 	    SETTINGS *s = 0;
 	    int jmp = JMP_NONE;
 	    LIST *l;
@@ -613,6 +617,8 @@ evaluate_rule(
 	    freesettings( s );
 
 	    parse_free( parse );
+	    if (parse_had_no_src)
+  	    parse->src_file = 0, parse->src_line = 0;
 	}
 
 	if( DEBUG_COMPILE )

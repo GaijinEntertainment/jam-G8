@@ -81,6 +81,18 @@ yyanyerrors()
 	return anyerrors != 0;
 }
 
+const char *
+yyfilename()
+{
+	return incp ? incp->fname : 0;
+}
+
+int
+yyfileline()
+{
+	return incp ? incp->line : 0;
+}
+
 void
 yyfparse( const char *s )
 {

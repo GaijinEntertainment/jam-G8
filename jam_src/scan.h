@@ -15,6 +15,8 @@
  *	yymode() - adjust lexicon of scanner
  *	yyparse() - declaration for yacc parser
  *	yyanyerrors() - indicate if any parsing errors occured
+ *	yyfilename(), yyfileline() - the scanner's current position, for
+ *		rules that want to report where they were invoked from
  *
  * The yymode() function is for the parser to adjust the lexicon of the
  * scanner.  Aside from normal keyword scanning, there is a mode to
@@ -45,6 +47,8 @@ void yymode( int n );
 void yyerror( const char *s );
 int yyanyerrors();
 void yyfparse( const char *s );
+const char *yyfilename();
+int yyfileline();
 int yyline();
 int yylex();
 int yyparse();

@@ -364,7 +364,7 @@ builtin_simplify_composed(
 }
 
 static LIST *
-dispatch_rule2( const char *rulename, LIST *arg0, LIST *arg1 )
+dispatch_rule2( PARSE *parse_parent, const char *rulename, LIST *arg0, LIST *arg1 )
 {
 	LOL lol;
 	LIST *r;
@@ -372,7 +372,7 @@ dispatch_rule2( const char *rulename, LIST *arg0, LIST *arg1 )
 	lol_init( &lol );
 	lol_add( &lol, list_copy( L0, arg0 ) );
 	lol_add( &lol, list_copy( L0, arg1 ) );
-	r = evaluate_rule( rulename, &lol, L0 );
+	r = evaluate_rule( parse_parent, rulename, &lol, L0 );
 	lol_free( &lol );
 
 	return r;
@@ -401,7 +401,7 @@ builtin_make_path_absolute(
 	 * the interpreted MakePathAbsolute's named call would */
 
 	if( bindrule( "SimplifyComposedPath" )->procedure )
-	    return dispatch_rule2( "SimplifyComposedPath", prefix, suffix );
+	    return dispatch_rule2( parse, "SimplifyComposedPath", prefix, suffix );
 
 	for( ; suffix; suffix = list_next( suffix ) )
 	    out = make_path_absolute_one( out, prefix, suffix->string );
@@ -426,7 +426,7 @@ builtin_make_path_list_absolute(
 	    {
 		LIST *one = list_new( L0, l->string, 1 );
 		out = list_append( out,
-		    dispatch_rule2( "MakePathAbsolute", prefix, one ) );
+		    dispatch_rule2( parse, "MakePathAbsolute", prefix, one ) );
 		list_free( one );
 	    }
 	    else if( l->string[0] == '.' && l->string[1] == '.' )
@@ -669,7 +669,7 @@ deprule_finish( LOL *args, LIST *changed )
 	    lol_init( &lol );
 	    lol_add( &lol, list_copy( L0, targets ) );
 	    lol_add( &lol, list_copy( L0, changed ) );
-	    list_free( evaluate_rule( "Includes", &lol, L0 ) );
+	    list_free( evaluate_rule( 0, "Includes", &lol, L0 ) );
 	    lol_free( &lol );
 	}
 	else for( l = targets; l; l = list_next( l ) )
@@ -691,7 +691,7 @@ deprule_finish( LOL *args, LIST *changed )
 
 	    lol_init( &lol );
 	    lol_add( &lol, changed );		/* ownership transferred */
-	    list_free( evaluate_rule( "null_action", &lol, L0 ) );
+	    list_free( evaluate_rule( 0, "null_action", &lol, L0 ) );
 	    lol_free( &lol );
 	    return;
 	}

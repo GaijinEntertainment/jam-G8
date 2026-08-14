@@ -26,6 +26,8 @@ struct _PARSE {
 	const char	*string1;
 	int		num;
 	int		refs;
+	const char	*src_file;	/* jamfile this came from, 0 for  */
+	int			 src_line;	/* the builtins; see parse_make() */
 } ;
 
 void 	parse_file( const char *f );

@@ -91,6 +91,8 @@ parse_make(
 	p->string1 = string1;
 	p->num = num;
 	p->refs = 1;
+	p->src_file = yyfilename();
+	p->src_line = yyfileline();
 
 	return p;
 }

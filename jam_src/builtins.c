@@ -303,6 +303,8 @@ builtin_glob(
 
 	globbing.results = L0;
 	globbing.patterns = r;
+	if( !l || !r )
+	    return L0;
 
 	PROF_ENTER( PROF_GLOB );
 
@@ -313,6 +315,12 @@ builtin_glob(
 	{
 	    GLOBDIR gdirent, *gd = &gdirent;
 	    LIST *e;
+
+	    if( !l->string[0] )
+	    {
+		fprintf( stderr, "warning: %s,%d: GLOB with an empty directory name, ignored\n", parse->src_file, parse->src_line );
+		continue;
+	    }
 
 	    gd->dir = l->string;
 

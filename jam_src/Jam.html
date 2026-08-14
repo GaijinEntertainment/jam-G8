@@ -998,6 +998,11 @@ jam [ -a ] [ -g ] [ -n ] [ -q ] [ -v ]
 	statement.  Only useful within the <tt>[ ]</tt> construct, to
 	change the result into a list.
 
+	<P>An empty <i>directories</i> entry doesn't name any directory and
+	contributes nothing to the result; jam issues warning (it usually
+	means a variable or a <b>:D</b>	modifier expanded to nothing).
+	Use <b>.</b> to scan the current directory.
+
 	<P><DT><CODE>
 	MATCH <i>regexps</I> : <I>list</I> ;
 	</CODE>
