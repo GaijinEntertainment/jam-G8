@@ -14,18 +14,20 @@ rule ProcessCompileTarget
   }
 
   local O3 = -O3 ;
-  if $(CheckOnly) = yes { O3 = -O0 ; }
+  if $(CheckOnly) = yes { O3 = -O1 ; }
   switch $(Config) {
     case dev :
       _CONFIG_OPT = $(O3) -DDAGOR_DBGLEVEL=1 ;
     case rel :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=0 $(O3) -DNDEBUG=1 ;
+      _CONFIG_OPT = -DDAGOR_DBGLEVEL=0 $(O3) -DNDEBUG ;
     case irel :
-      _CONFIG_OPT = -DDAGOR_DBGLEVEL=-1 $(O3) -DNDEBUG=1 ;
+      _CONFIG_OPT = -DDAGOR_DBGLEVEL=-1 $(O3) -DNDEBUG ;
     case dbg :
       _CONFIG_OPT = -DDAGOR_DBGLEVEL=2 ;
+      FortifySource = ; # _FORTIFY_SOURCE requires compiling with optimization
     case * :
       _CONFIG_OPT = ;
+      FortifySource = ;
   }
   if $(CheckOnly) != yes { _CONFIG_OPT += -g ; }
 
@@ -55,7 +57,7 @@ rule ProcessCompileTarget
 }
 
 
-rule DepRule
+if ! DepRuleDotDot in $(JAM_BUILTINS) { rule DepRuleDotDot
 {
   local changed_dep = ;
 
@@ -65,7 +67,6 @@ rule DepRule
     local rel_path = ;
     switch $(dep) 
     {
-      case /Develop/SDK* : dep = ; # skip target part
       case *: : dep = ; # skip target part
       case /* : changed_dep += $(dep) ;   # absolute path with drive
       case *  : rel_path = [ MATCH "[\.\\\/]*([^ \
@@ -76,7 +77,7 @@ rule DepRule
 
   Includes $(<) : $(changed_dep) ;
   null_action $(changed_dep) ;
-}
+} }
 
 
 rule CheckHeaders
@@ -90,7 +91,7 @@ rule CheckHeaders
                       ]*([^ \\\
                       ]+)[ \\\
                       ]" ;
-  HDRRULE  on $(>) = DepRule ;
+  HDRRULE  on $(>) = DepRuleDotDot ;
   HDRFS    on $(>) = yes ;
 }
 

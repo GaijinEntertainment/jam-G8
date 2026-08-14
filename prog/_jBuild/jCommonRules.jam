@@ -1,7 +1,7 @@
 # general-purpose python-based file stringifier
-if $(OS) = NT { PYTHON_EXE = $(_DEVTOOL)/python/python.exe ; }
-else if $(OS) in MACOSX { PYTHON_EXE = python ; }
-else if $(OS) in LINUX { PYTHON_EXE = python ; }
+if $(OS) = NT { PYTHON_EXE ?= $(_DEVTOOL)/python3/python3.exe ; PYTHON_EXE ?= $(GDEVTOOL)/python3/python3.exe ; }
+else if $(OS) in MACOSX { PYTHON_EXE ?= python3 ; }
+else if $(OS) in LINUX { PYTHON_EXE ?= python3 ; }
 
 if $(OS) in MACOSX && $(PYTHON_EXE) = python3 && ! [ GLOB /usr/bin : $(PYTHON_EXE) ] {
   echo warning: $(PYTHON_EXE) not found, trying to use python ;
@@ -37,6 +37,10 @@ rule MakeDirectory
 }
 
 # concatenates (prefix : suffix) and simplifies path
+# newer jam.exe provides this rule as a C builtin (see $(JAM_BUILTINS));
+# keep the interpreted fallback for older jam.exe
+if ! SimplifyComposedPath in $(JAM_BUILTINS) {
+# concatenates (prefix : suffix) and simplifies path
 rule SimplifyComposedPath
 {
   local prefix = $(1) ;
@@ -49,6 +53,7 @@ rule SimplifyComposedPath
   }
   return $(prefix)/$(suffix) ;
 }
+}
 
 # concatenates (prefix : suffix) if suffix starts with ".." and simplifies path
 # This function is designed to create absolute path.
@@ -57,12 +62,16 @@ rule SimplifyComposedPath
 # a) system libs like "ws2_32.lib", "advapi32.lib", ...
 # b) absolute paths to external libs like: "/home/bs/devtools/oodle.2.7/lib/liboo2corelinux64.a"
 # The function is useful for MSVC because it allows to get shorter paths than <CWD>/<RELATIVE_PATH>
+# newer jam.exe provides this rule as a C builtin (see $(JAM_BUILTINS));
+# keep the interpreted fallback for older jam.exe
+if ! MakePathAbsolute in $(JAM_BUILTINS) {
 rule MakePathAbsolute prefix : suffix
 {
   switch $(suffix) {
     case ..* : return [ SimplifyComposedPath $(prefix) : $(suffix) ] ;
   }
   return $(suffix) ;
+}
 }
 
 # concatenates (prefix : suffixList) if suffix starts with ".." and simplifies path
@@ -73,6 +82,9 @@ rule MakePathAbsolute prefix : suffix
 # a) system libs like "ws2_32.lib", "advapi32.lib", ...
 # b) absolute paths to external libs like: "/home/bs/devtools/oodle.2.7/lib/liboo2corelinux64.a"
 # The function is useful for MSVC because it allows to get shorter paths than <CWD>/<RELATIVE_PATH>
+# newer jam.exe provides this rule as a C builtin (see $(JAM_BUILTINS));
+# keep the interpreted fallback for older jam.exe
+if ! MakePathListAbsolute in $(JAM_BUILTINS) {
 rule MakePathListAbsolute prefix : suffixList
 {
   local result = ;
@@ -83,6 +95,8 @@ rule MakePathListAbsolute prefix : suffixList
   }
   return $(result) ;
 }
+}
+
 
 rule BuildValidJamString
 {
@@ -119,11 +133,13 @@ rule StrToCIdent
 
 rule AutoscanBuildLists # folder_list : wildcard : dest_var : excl_regexp
 {
+  local excl_regexp = $(4) ;
+  if ! $(excl_regexp) && $(2) = *.cpp { excl_regexp = \\.cpp\\.gen\\.es\\.cpp$ ; }
   for sd in $(1) {
     local s = [ GLOB $(Root)/$(Location)/$(sd) : $(2) ] ;
     s = $(s:D=$(sd)) ;
-    if $(4) {
-      for f in $(s) { if ! [ MATCH "($(4))" : $(f) ] { $(3) += $(f) ; } }
+    if $(excl_regexp) {
+      for f in $(s) { if ! [ MATCH "($(excl_regexp))" : $(f) ] { $(3) += $(f) ; } }
     } else {
       $(3) += $(s) ;
     }
@@ -135,7 +151,7 @@ if $(OS) = NT {
   {
     echo * copy file to:   $(file)
     set_filter nul /1 file\(s\) copied/
-    call_filtered $(ComSpec) /C copy /Y /B /V #\( $(2) $(1) )\#
+    call_filtered $(ComSpec) /C copy /Y /B /V #\( "$(2)" "$(1)" )\# >nul
     clr_filters
     if not exist $(1) set errorlevel=13
   }

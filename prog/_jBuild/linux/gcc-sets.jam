@@ -1,10 +1,11 @@
-#  Setup for gcc compiler for LINUX 64-bit (to be included from jBuild.jam)
+#  Setup for gcc compiler for LINUX (to be included from jBuild.jam)
 StripType ?= debug ;
 
 _OBJ_SUFFIX  = .o ;
+MAbi ?= 64 ; # 32 x32
 
 local _DEF_COM_CMDLINE =
-  -pipe -c -msse$(SSEVersion)
+  -pipe -c -msse$(SSEVersion) -m$(MAbi)
   -MMD -Wno-trigraphs -Wno-multichar -Wformat -Wno-format-extra-args -Wno-ignored-attributes
   -Wno-deprecated -Wno-format-truncation -Wno-nonnull
   -ffunction-sections -fdata-sections -fno-omit-frame-pointer
@@ -13,27 +14,29 @@ local _DEF_COM_CMDLINE =
   -Wno-deprecated-declarations # e.g. auto_ptr<>
   -Wno-maybe-uninitialized # EASTL's string SSO seems to cause this
   -Wno-stringop-overflow -Wno-stringop-overread # too many false-positives
-  "\"-D__forceinline=inline __attribute__((always_inline))\"" -D__cdecl= -D__stdcall= -D__fastcall=
+  -D_TARGET_PC=3 -D_TARGET_PC_LINUX=3 -D_TARGET_SIMD_SSE=$(SSEVersion)
   -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
-  -D_snprintf=snprintf
-  -D_vsnprintf=vsnprintf
-  -Dstricmp=strcasecmp
-  -Dstrnicmp=strncasecmp
-  -D_TARGET_PC=3 -D_TARGET_PC_LINUX=3
-  -D_TARGET_64BIT=1
-  -D__LINUX__=64
-  -D_TARGET_SIMD_SSE=$(SSEVersion)
-  -Di_strlen=(int)strlen
   -D__STDC_CONSTANT_MACROS
 ;
-if $(KernelLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB=1 ; }
+if $(MAbi) = 64 { _DEF_COM_CMDLINE += -D_TARGET_64BIT -D_TARGET_ARCH_X86_64 -D__LINUX__=64 ; }
+else { _DEF_COM_CMDLINE += -D_TARGET_ARCH_X86 -D__LINUX__=32 -D_FILE_OFFSET_BITS=64 ; }
+if $(KernelLinkage) = static { _DEF_COM_CMDLINE += -D_TARGET_STATIC_LIB ; }
 if $(PlatformArch) = e2k { _DEF_COM_CMDLINE += -D_XM_NO_INTRINSICS_ -w2620 -w2189 -w826 -Wno-unused-parameter ; }
 
 local _DEF_C_CMDLINE = -std=c99 ;
-local _DEF_CPP_CMDLINE = -std=c++$(CPPStd) -fconserve-space -Wno-invalid-offsetof ;
+local _DEF_CPP_CMDLINE = -std=c++$(CPPStd) -fconserve-space -Wno-invalid-offsetof -fvisibility-inlines-hidden ;
 
-_LINK         = g++ -pipe ;
-_LINK_DLL     = g++ -pipe -shared ;
+_LINK         = g++ -pipe -m$(MAbi) -isysroot /usr/include ;
+_LINK_DLL     = g++ -pipe -m$(MAbi) -isysroot /usr/include -shared ;
+
+if $(UseMOLDLink) = yes {
+  _LINK += -B/usr/libexec/mold ;
+  _LINK_DLL += -B/usr/libexec/mold ;
+} else if $(UseMOLDLink) = fuse {
+  _LINK += -fuse-ld=mold ;
+  _LINK_DLL += -fuse-ld=mold ;
+}
+
 _LIB          = ar ranlib ;
 
 if $(UseLtoJobs) != 0  {
@@ -45,9 +48,6 @@ if $(UseLtoJobs) != 0  {
 
 if $(Sanitize) != disabled {
   _DEF_COM_CMDLINE += -fsanitize=$(Sanitize) ;
-  if $(Sanitize) = address {
-    _DEF_COM_CMDLINE += --param asan-stack=0 ;
-  }
   if $(Sanitize) = thread {
     # __SANITIZE_THREAD__ is missing from gcc, but not __SANITIZE_ADDRESS__
     _DEF_COM_CMDLINE += -D__SANITIZE_THREAD__ ;
@@ -59,7 +59,7 @@ if $(Sanitize) != disabled {
 if $(Exceptions) != yes {
   _DEF_CPP_CMDLINE += -fno-exceptions ;
 } else {
-  _DEF_CPP_CMDLINE += -fexceptions -DDAGOR_EXCEPTIONS_ENABLED=1 ;
+  _DEF_CPP_CMDLINE += -fexceptions -DDAGOR_EXCEPTIONS_ENABLED ;
 }
 
 if $(Rtti) != yes {
@@ -81,8 +81,8 @@ CXX ?= g++ ;
 
 _C_COMPILER   = $(CC) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_C_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
 _CPP_COMPILER = $(CXX) [ StripStrings $(_DEF_COM_CMDLINE) $(_DEF_CPP_CMDLINE) : $(RemoveCompilerSwitches_$(_BuildEnv)) ] ;
-_ASM_COMPILER = nasm -f ;
-_GAS_COMPILER = $(CC) -g -c ;
+_ASM_COMPILER = nasm -f elf$(MAbi) ;
+_GAS_COMPILER = $(CC) -g -c -m$(MAbi) ;
 
 _INCLUDE      = $(Root)/prog/dagorInclude $(Root)/prog/1stPartyLibs $(Root)/prog/3rdPartyLibs ;
 
@@ -95,5 +95,7 @@ for inc in $(_INCLUDE) {
   _CPP_BASE_INCLUDES += -I $(inc) ;
   _C_BASE_INCLUDES   += -I $(inc) ;
 }
+_CPP_BASE_INCLUDES += -include supp/dag_compatibility_defines_posix.h ;
+_C_BASE_INCLUDES   += -include supp/dag_compatibility_defines_posix.h ;
 
 _DEF_C_CMDLINE = ;

@@ -49,7 +49,7 @@ rule ProcessLinkTarget
       Depends $(dest) : $(t) ;
       file on $(dest) = $(t:D=) ;
       post_copy_cmd on $(dest) = call chmod +x $(Root)/prog/_jBuild/macOS/lipo_dylib "
- " call $(Root)/prog/_jBuild/macOS/lipo_dylib x86_64 $(dest) "
+ " call $(Root)/prog/_jBuild/macOS/lipo_dylib $(PlatformArch) $(dest) "
  " set errorlevel=0 ;
       raw_copy_file $(dest) : $(t) ;
       Depends $(OutDir)/$(Target) : $(dest) ;
@@ -121,6 +121,7 @@ rule ProcessLinkTarget
     $(Target)__LINK     = $(_LINK) ;
     $(Target)__LINK_OPT = $(LINKopt) ; #-lpthread ;
     $(Target)__IMGBUILD = rem ;
+    on $(Target) if $(need_buildstamp) = yes { LinkExeSetBuildStamp $(Target) ; }
     $(Target)__POSTLINK_CMD += $(_INSTALL_NAME_TOOL) -id $(Target:D=) $(OutDir)/$(Target) "
   " ;
   }
@@ -141,7 +142,7 @@ actions together quietly link_target
   echo linking $(1:B)$(1:S)
   del $(1)
   set MACOSX_DEPLOYMENT_TARGET=$(MacOSXMinVer)
-  call $(link) $(link_opt) $(link_libs) $(obj_list) -o $(1)
+  call $(link) $(link_opt) $(obj_list) $(link_libs) -o $(1)
   if errorlevel 1 goto failed
   $(postlink_cmd)
   if errorlevel 1 goto failed
