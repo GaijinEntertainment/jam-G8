@@ -8,10 +8,15 @@ Config     = rel ;
 Root      ?= .. ;
 Location   = jam_src ;
 ConsoleExe = yes ;
+PlatformArch_windows ?= x86_64 ;
+PlatformSpec_windows ?= clang ;
+include $(Root)/prog/_jBuild/defPlatform.jam ;
 
 TargetType = exe ;
 Target     = jam ;
-OutDir     = $(Root) ;
+OutDir    ?= $(Root)/_built-$(Platform)-$(PlatformArch) ;
+
+include $(Root)/prog/_jBuild/defaults.jam ;
 
 Sources =
   builtins.c command.c compile.c expand.c execdmc.c fileunix.c glob.c hash.c
@@ -22,18 +27,21 @@ Sources =
 ;
 
 if $(OS) = NT {
-  PlatformArch ?= x86_64 ;
   Copt = -DNT ;
   Sources += filent.c ;
 }
 if $(OS) = MACOSX {
-  Copt = -Wno-parentheses ;
   if $(OSX_CPU_TYPE) = arm64 { PlatformArch ?= arm64 ; MacOSXMinVer ?= 11.0 ; }
 }
 if $(PlatformArch) = e2k {
+  ElbrusTargetArch ?= "default" ;
   PlatformSpec = gcc ;
   RemoveCompilerSwitches_linux/gcc = -mno-recip -minline-all-stringops -fconserve-space ;
-  Copt += -march=elbrus-v3 ;
+  if $(ElbrusTargetArch) != "default" { Copt += -march=elbrus-$(ElbrusTargetArch) ; }
 }
+
+if $(PlatformSpec) = clang { Copt += -Wno-parentheses -Wno-comments ; }
+if $(PlatformSpec) = gcc { Copt += -Wno-unused-result ; }
+UseWholeOpt = yes ;
 
 include $(Root)/prog/_jBuild/build.jam ;

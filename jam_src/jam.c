@@ -174,7 +174,7 @@ extern char **environ;
 # endif
 # endif
 
-#define JAMBUILDSTR "1.33-2026/05/07"
+#define JAMBUILDSTR "1.34-2026/08/15"
 
 int main(int argc, char **argv, char **arg_environ)
 {

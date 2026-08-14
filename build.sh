@@ -28,7 +28,7 @@ fi
 
 cd jam_src
 mkdir -p _output
-c_opt='-pipe -x c -c -MD -Wno-error -Wno-trigraphs -Wno-multichar -Wno-parentheses -DNDEBUG=1 -D_GNU_SOURCE -pthread'
+c_opt='-pipe -x c -c -MD -Wno-error -Wno-trigraphs -Wno-multichar -Wno-parentheses -Wno-format-truncation -Wno-comment -DNDEBUG=1 -D_GNU_SOURCE -pthread -include ../prog/dagorInclude/supp/dag_compatibility_defines_posix.h'
 gcc $c_opt -o _output/builtins.o builtins.c
 gcc $c_opt -o _output/changedPaths.o changedPaths.c
 gcc $c_opt -o _output/fastre.o fastre.c
@@ -65,7 +65,7 @@ g++ -pipe _output/builtins.o _output/changedPaths.o _output/fastre.o _output/dep
 rm -rf _output
 cd ..
 rm ./jam
-./jam_0 -sRoot=. $jam_opt -f jam_src/jamfile -a
+./jam_0 -sRoot=. -sOutDir=. $jam_opt -f jam_src/jamfile -a
 
 if [ -d "$devtool_dir" ]; then
   sudo cp jam $devtool_dir/jam
