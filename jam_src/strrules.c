@@ -775,6 +775,21 @@ builtin_deprule_dotdot(
 	LIST *l;
 	LIST *changed = L0;
 	const char *last = 0;
+#if defined(OS_MACOSX)
+	static char _devtool_prefix[1024] = { 0 };
+	static int _devtool_prefix_len = -1;
+	if( _devtool_prefix_len < 0 )
+	{
+	    LIST *_devtool = var_get( "_DEVTOOL" );
+	    _devtool_prefix_len = 0;
+	    if( _devtool && _devtool->string && *_devtool->string )
+	    {
+	      _snprintf( _devtool_prefix, sizeof( _devtool_prefix ), "%s/mac/SDK", _devtool->string );
+	      _devtool_prefix_len = strlen( _devtool_prefix );
+	    }
+	}
+#endif
+	int first_dep_str_checked = 0;
 
 	PROF_ENTER( PROF_DR_XFORM );
 
@@ -782,8 +797,23 @@ builtin_deprule_dotdot(
 	{
 	    const char *dep = l->string;
 
+	    // skip optional first line like 'xxx.o: \', with spaces and '\' stripped by HDRSCAN
+	    if (!first_dep_str_checked)
+	    {
+	      first_dep_str_checked = 1;
+	      size_t slen = strlen(dep);
+	      if (slen > 1 && dep[slen-1] == ':')
+	        continue;
+	    }
+
 	    last = l->string;
 
+#if defined(OS_MACOSX)
+	    if( *dep == '/' &&
+	        ( strncmp( dep, "/Applications/Xcode.app/", 24 ) == 0 ||
+	          ( _devtool_prefix_len && strncmp( dep, _devtool_prefix, _devtool_prefix_len ) == 0 ) ) )
+	      continue; /* skip dep to quasi-invariant SDK */
+#endif
 	    /* MATCH "(\.\./|\.\.\\)*(.*)" : take group 2 */
 
 	    while( dep[0] == '.' && dep[1] == '.'
