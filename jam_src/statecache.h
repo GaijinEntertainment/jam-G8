@@ -68,7 +68,7 @@ void statecache_note_echo( const char *text );
 void statecache_builtin_barrier( void );
 
 /* try to restore state; returns 1 on cache hit (skip parsing) */
-int statecache_try_load( void );
+int statecache_try_load( const char *jamfile_name );
 
 /* serialize state after a successful parse (no-op on miss/disabled) */
 void statecache_save( void );

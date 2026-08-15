@@ -66,12 +66,11 @@
 # include <windows.h>
 # include <direct.h>
 # include <process.h>
-# define sc_getcwd _getcwd
 # define sc_getpid _getpid
 # define sc_environ _environ
 # else
+# include <sys/time.h>
 # include <unistd.h>
-# define sc_getcwd getcwd
 # define sc_getpid getpid
 extern char **environ;
 # define sc_environ environ
@@ -100,9 +99,21 @@ sc_now_msig( void )
 	GetSystemTimeAsFileTime( &ft );
 	return (long long)( ( (unsigned long long)ft.dwHighDateTime << 32 )
 	    | ft.dwLowDateTime );
+# elif defined(OS_MACOSX) // OS X does not have clock_gettime, use gettimeofday
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 10000000ll + tv.tv_usec * 10ll;
 # else
-	return (long long)time( 0 ) * 10000000ll;
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return ts.tv_sec * 10000000ll + ts.tv_nsec / 100ll;
 # endif
+}
+
+static double
+sc_msig_diff_sec( long long msig_t0, long long msig_t1 )
+{
+  return (msig_t1 - msig_t0) / 1e7;
 }
 
 typedef struct sc_inc {
@@ -119,6 +130,7 @@ static int  sc_argv_over = 0;	/* command line did not fit: disable */
 static const char *sc_jamver = "?";
 static int  sc_state = 0;	/* 0 unknown, -1 off, 1 armed */
 static int  sc_loaded = 0;	/* cache hit this run */
+static int  sc_explicit = 0;	/* the user named JamStateCachePath */
 static int  sc_sealed = 0;	/* parse over; stop recording reads */
 static long long sc_run_start;	/* racy-entry horizon (msig units) */
 static char sc_path[ 1024 ];
@@ -388,33 +400,50 @@ sc_env_current_value( const char *name )
 }
 
 static int
-sc_init( void )
+sc_init( const char *jamfile )
 {
 	LIST *var;
+	LIST *var_cwd;
 
 	if( sc_state )
 	    return sc_state > 0;
 
 	sc_state = -1;
 
+	var_cwd = var_get("JAM_CWD");
+	if ( !var_cwd || !var_cwd->string || !var_cwd->string[0] )
+		return 0; /* an unfingerprintable cwd would make the manifest's cwd check vacuous: disable instead */
+
 	var = var_get( "JamStateCachePath" );
-	if( !var || !var->string || !var->string[0] )
+	if( var && var->string && ( !var->string[0] || !strcmp( var->string, "none" ) ) )
 	    return 0;
-	if( strlen( var->string ) >= sizeof( sc_path ) )
+	if( var && var->string && strlen( var->string ) >= sizeof( sc_path ) )
 	    return 0;
 	if( sc_argv_over )
 	    return 0;	/* truncated command lines could alias */
 
+	if( var && var->string )
 	{
-	    /* an unfingerprintable cwd would make the manifest's cwd
-	     * check vacuous: disable instead */
-	    char cwd[ 1024 ];
-	    cwd[0] = 0;
-	    if( !sc_getcwd( cwd, sizeof( cwd ) - 1 ) || !cwd[0] )
-		return 0;
+	    strcpy( sc_path, var->string );
+	    sc_explicit = 1;
 	}
-
-	strcpy( sc_path, var->string );
+	else if ( jamfile )
+	{
+		if( strlen( var_cwd->string ) + 1 + 2 + strlen( jamfile ) + 7 + 1 > sizeof( sc_path ))
+			return 0; // too long path
+		_snprintf( sc_path, sizeof( sc_path ), "%s/%s~parsed", var_cwd->string, jamfile );
+		char *p = sc_path;
+		for( ; *p; p ++ )
+		  if (*p == '\\')
+  		  *p = '/';
+  	p = strrchr(sc_path, '/');
+  	p = p ? p + 1 : sc_path;
+  	memmove(p + 2, p, strlen( p ) + 1);
+  	p[0] = '.';
+  	p[1] = '#';
+	}
+	else
+		return 0;
 
 	sc_run_start = sc_now_msig();
 	sc_state = 1;
@@ -789,9 +818,9 @@ sc_filesig( const char *path, SC_SIG *sig )
 	    return 0;
 
 	sig->msig = (long long)st.st_mtime * 10000000ll;
-#  if defined(__linux__)
+#  if defined(OS_LINUX)
 	sig->msig += st.st_mtim.tv_nsec / 100;
-#  elif defined(__APPLE__)
+#  elif defined(OS_MAC)
 	sig->msig += st.st_mtimespec.tv_nsec / 100;
 #  endif
 	sig->size = (long long)st.st_size;
@@ -826,16 +855,13 @@ sc_write_manifest( SC_BUF *b )
 {
 	unsigned n;
 	SC_INC *i;
-	char cwd[ 1024 ];
 
 	sc_env_collect();
 
 	buf_str( b, sc_jamver );
 	buf_str( b, sc_argv );
 
-	cwd[0] = 0;
-	sc_getcwd( cwd, sizeof( cwd ) - 1 );
-	buf_str( b, cwd );
+	buf_str( b, var_get("JAM_CWD")->string );
 
 	/* environment values of every variable the parse read */
 	{
@@ -884,6 +910,9 @@ sc_write_manifest( SC_BUF *b )
 void
 statecache_save( void )
 {
+	if( !sc_explicit && sc_msig_diff_sec( sc_run_start, sc_now_msig() ) < 0.3f )
+		return; // too fast parse, no need to save cache
+
 	char tmp[ 1100 ];
 	size_t patch_vars, patch_rules, patch_acts, patch_tgts;
 	unsigned nvars, nrules, ntgts;
@@ -894,10 +923,11 @@ statecache_save( void )
 	 * influence the recorded parse */
 	sc_sealed = 1;
 
-	if( !sc_init() || sc_loaded )
+	if( !sc_init( 0 ) || sc_loaded )
 	    return;
 
 	/* refusal scan: HDRRULE must resolve to builtins only */
+  long long reft = sc_now_msig();
 
 	sc_refuse = 0;
 	if( ( gv = var_get( "HDRRULE" ) ) )
@@ -1042,6 +1072,8 @@ statecache_save( void )
 	free( sc_actid );
 	hashdone( sc_strhash );
 	sc_strhash = 0;
+	printf( " . parsed for %.2f sec (and saved to %s for %.2f sec)\n",
+  	sc_msig_diff_sec( sc_run_start, reft ), sc_path, sc_msig_diff_sec( reft, sc_now_msig() ) );
 }
 
 /* ------------------------------------------------------------------ */
@@ -1162,7 +1194,6 @@ sc_check_manifest( SC_RD *r, SC_PARSEDVEC *pv, char **echo_out )
 {
 	char *s;
 	unsigned n, i;
-	char cwd[ 1024 ];
 
 	s = rd_str( r );
 	if( !s || strcmp( s, sc_jamver ) )
@@ -1174,10 +1205,8 @@ sc_check_manifest( SC_RD *r, SC_PARSEDVEC *pv, char **echo_out )
 	    { SC_MISS( "command line\n" ); free( s ); return 0; }
 	free( s );
 
-	cwd[0] = 0;
-	sc_getcwd( cwd, sizeof( cwd ) - 1 );
 	s = rd_str( r );
-	if( !s || strcmp( s, cwd ) )
+	if( !s || strcmp( s, var_get("JAM_CWD")->string ) )
 	    { SC_MISS( "cwd\n" ); free( s ); return 0; }
 	free( s );
 
@@ -1353,7 +1382,7 @@ rd_idxarray( SC_RD *r, unsigned *count, unsigned maxidx )
 }
 
 int
-statecache_try_load( void )
+statecache_try_load( const char *jamfile_name )
 {
 	FILE *f;
 	long fsize;
@@ -1375,7 +1404,7 @@ statecache_try_load( void )
 
 	memset( &pv, 0, sizeof( pv ) );
 
-	if( !sc_init() )
+	if( !sc_init( jamfile_name ) )
 	    return 0;
 
 	f = fopen( sc_path, "rb" );

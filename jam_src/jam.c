@@ -383,7 +383,12 @@ int main(int argc, char **argv, char **arg_environ)
 
 	PROF_ENTER( PROF_PARSE );
 
-	if( statecache_try_load() )
+	const char *jamfile_name = getoptval( optv, 'f', 0 );
+	if( !jamfile_name )
+		jamfile_name = "jamfile";
+	else if( getoptval( optv, 'f', 1 ) ) // don't support several -fjam options
+		jamfile_name = 0;
+	if( statecache_try_load( jamfile_name ) )
 	{
 	    /* JAMFILESRC/JAMTARGETS were part of the cached variable set;
 	     * the command line is validated by the cache manifest, so the
