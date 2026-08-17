@@ -61,6 +61,7 @@
 # include <string.h>
 # include <sys/types.h>
 # include <sys/stat.h>
+# include <errno.h>
 
 # ifdef OS_NT
 # include <windows.h>
@@ -71,6 +72,7 @@
 # else
 # include <sys/time.h>
 # include <unistd.h>
+# include <dirent.h>
 # define sc_getpid getpid
 extern char **environ;
 # define sc_environ environ
@@ -79,6 +81,8 @@ extern char **environ;
 # define SC_FORMAT	2u
 # define SC_MAXSTR	( 1u << 22 )
 # define SC_MAXCOUNT	( 1u << 26 )
+# define SAFE_SNPRINTF(BUF, BUF_SZ, FMT, ...) do { _snprintf(BUF, BUF_SZ, FMT, __VA_ARGS__); BUF[BUF_SZ-1] = '\0'; } while(0)
+# define SAFE_SPRINTF(BUF, FMT, ...) SAFE_SNPRINTF(BUF, sizeof(BUF), FMT, __VA_ARGS__)
 
 /* ------------------------------------------------------------------ */
 /* recorded inputs                                                     */
@@ -399,6 +403,88 @@ sc_env_current_value( const char *name )
 	return getenv( name );
 }
 
+/*
+ * sc_default_path() - where the cache lives when nobody named a file
+ *
+ * jam decides whether to use the cache BEFORE it reads a jamfile, so a
+ * jamfile cannot name it; all that exists at this point is the command
+ * line, the cwd and the environment.  So derive a slot in a per-user
+ * cache directory - never inside the source tree, which may be
+ * read-only or shared and is no place for a 10 MB build artifact.
+ *
+ * The name hashes (jam version, cwd, command line) purely so different
+ * projects and configurations do not fight over one slot.  It is NOT a
+ * validity key: the manifest inside the file re-checks all three
+ * explicitly, so a hash collision costs one cache miss and can never
+ * produce a wrong build.
+ */
+
+static int
+sc_mkdir( const char *path )
+{
+# ifdef OS_NT
+	return _mkdir( path ) == 0 || errno == EEXIST;
+# else
+	/* 0700: the cache is executed-as-trusted on the next run (its
+	 * action text goes straight to the shell), so nobody else gets
+	 * to write it - and nothing in it is worth sharing anyway */
+	return mkdir( path, 0700 ) == 0 || errno == EEXIST;
+# endif
+}
+
+static int
+sc_default_path( char *out, int size )
+{
+	const char *base;
+	const char *xdg = 0;
+	char dir[ 1024 ];
+	unsigned h = 5381u;
+	const char *p;
+	LIST *var_cwd;
+
+# ifdef OS_NT
+	/* LOCALAPPDATA only - no TEMP fallback: %TEMP% can resolve to a
+	 * machine-shared directory (services, C:\Windows\Temp), which is
+	 * no place for a file whose action text runs as-trusted later */
+	base = getenv( "LOCALAPPDATA" );
+# else
+	xdg = getenv( "XDG_CACHE_HOME" );
+	base = ( xdg && xdg[0] ) ? xdg : getenv( "HOME" );
+# endif
+
+	if( !base || !base[0] || strlen( base ) > sizeof( dir ) - 64 )
+	    return 0;
+
+# ifndef OS_NT
+	if( !( xdg && xdg[0] ) )
+	{
+	    SAFE_SPRINTF( dir, "%s/.cache", base );
+	    if( !sc_mkdir( dir ) )
+		return 0;
+	    SAFE_SPRINTF( dir, "%s/.cache/jam", base );
+	}
+	else
+# endif
+	SAFE_SPRINTF( dir, "%s/jam", base );
+
+	if( !sc_mkdir( dir ) )
+	    return 0;
+
+	var_cwd = var_get("JAM_CWD");
+	if ( !var_cwd || !var_cwd->string || !var_cwd->string[0] )
+	    return 0;
+
+	for( p = sc_jamver; *p; p++ ) h = ( h * 33u ) ^ (unsigned char)*p;
+	for( p = var_cwd->string; *p; p++ ) h = ( h * 33u ) ^ (unsigned char)*p;
+	for( p = sc_argv; *p; p++ )   h = ( h * 33u ) ^ (unsigned char)*p;
+
+	if( (int)strlen( dir ) + 24 >= size )
+	    return 0;
+
+	SAFE_SNPRINTF( out, size, "%s/%08x.jamstate", dir, h );
+	return 1;
+}
+
 static int
 sc_init( const char *jamfile )
 {
@@ -422,16 +508,16 @@ sc_init( const char *jamfile )
 	if( sc_argv_over )
 	    return 0;	/* truncated command lines could alias */
 
-	if( var && var->string )
+	if( var && var->string && strcmp( var->string, "*" ) != 0)
 	{
 	    strcpy( sc_path, var->string );
 	    sc_explicit = 1;
 	}
-	else if ( jamfile )
+	else if ( jamfile && var && var->string &&strcmp( var->string, "*" ) == 0 )
 	{
 		if( strlen( var_cwd->string ) + 1 + 2 + strlen( jamfile ) + 7 + 1 > sizeof( sc_path ))
 			return 0; // too long path
-		_snprintf( sc_path, sizeof( sc_path ), "%s/%s~parsed", var_cwd->string, jamfile );
+		SAFE_SPRINTF( sc_path, "%s/%s~parsed", var_cwd->string, jamfile );
 		char *p = sc_path;
 		for( ; *p; p ++ )
 		  if (*p == '\\')
@@ -442,7 +528,7 @@ sc_init( const char *jamfile )
   	p[0] = '.';
   	p[1] = '#';
 	}
-	else
+	else if( !sc_default_path( sc_path, sizeof( sc_path ) ) )
 		return 0;
 
 	sc_run_start = sc_now_msig();
@@ -907,6 +993,169 @@ sc_write_manifest( SC_BUF *b )
 	buf_str( b, sc_echo ? sc_echo : "" );
 }
 
+/*
+ * sc_prune() - age out abandoned slots from the default cache dir
+ *
+ * Every (project, configuration) pair gets its own slot file and
+ * nothing ever comes back for slots of trees or configurations that
+ * stopped being built.  After a save into the DEFAULT directory
+ * (never an explicit path - that location belongs to the user), unlink
+ * every file in it untouched for 14 days.  That directory is jam's
+ * own and holds nothing but regenerable caches, so age is the only
+ * question worth asking - which also disposes of the
+ * "<slot>.jamstate.<pid>.tmp" files left behind by runs killed between
+ * the write and the atomic replace.  A temp file being written right
+ * now is minutes old, so a live save is never disturbed.
+ *
+ * Runs only on the save path, so warm no-op builds never pay the
+ * directory scan; sc_touch() keeps a slot that is only ever READ from
+ * ageing out.
+ *
+ * Bursts of distinct configurations can still accumulate inside the
+ * window; the bound here is age, not total size.
+ */
+
+# define SC_PRUNE_DAYS 14
+
+/*
+ * sc_touch() - mark a slot as still in use, after a cache hit
+ *
+ * Only the timestamp changes, so a concurrent reader is unaffected, and
+ * nothing in the manifest describes this file's own mtime.
+ */
+
+# define SC_TOUCH_AGE_SEC ( 24 * 3600 )
+
+static void
+sc_touch( void )
+{
+	SC_SIG sig;
+
+	/* an explicit path is the user's file and is never pruned */
+
+	if( sc_explicit )
+	    return;
+
+	if( !sc_filesig( sc_path, &sig ) || sc_msig_diff_sec( sig.msig, sc_now_msig() ) < SC_TOUCH_AGE_SEC )
+	    return;
+
+# ifdef OS_NT
+	{
+	    FILETIME now;
+	    HANDLE h = CreateFileA( sc_path, FILE_WRITE_ATTRIBUTES,
+		  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
+
+	    if( h == INVALID_HANDLE_VALUE )
+			return;
+
+	    GetSystemTimeAsFileTime( &now );
+	    SetFileTime( h, 0, 0, &now );	/* last-write only */
+	    CloseHandle( h );
+	}
+# else
+	utimes( sc_path, 0 );			/* 0 == now */
+# endif
+
+	if( sc_debug() )
+	    fprintf( stderr, "jam: statecache: touched '%s'\n", sc_path );
+}
+
+static int
+sc_prune( void )
+{
+	char dir[ 1024 ];
+	char victim[ 1200 ];
+	int dl;
+	const char *slash;
+	const char *bslash;
+	int pruned_count = 0;
+
+	if( sc_explicit )
+	    return pruned_count;
+
+	slash = strrchr( sc_path, '/' );
+	bslash = strrchr( sc_path, '\\' );
+	if( bslash > slash )
+	    slash = bslash;
+	if( !slash || slash - sc_path >= (int)sizeof( dir ) - 8 )
+	    return pruned_count;
+
+	dl = (int)( slash - sc_path );
+	memcpy( dir, sc_path, dl );
+	dir[ dl ] = 0;
+
+# ifdef OS_NT
+	{
+	    WIN32_FIND_DATAA fd;
+	    HANDLE h;
+	    char pat[ 1100 ];
+	    unsigned long long now, cut;
+	    FILETIME ft;
+
+	    GetSystemTimeAsFileTime( &ft );
+	    now = ( (unsigned long long)ft.dwHighDateTime << 32 ) | ft.dwLowDateTime;
+	    cut = (unsigned long long)SC_PRUNE_DAYS * 24 * 3600 * 10000000ull;
+
+	    SAFE_SPRINTF( pat, "%s\\*", dir );
+
+	    h = FindFirstFileA( pat, &fd );
+	    if( h == INVALID_HANDLE_VALUE )
+			return pruned_count;
+
+	    do
+	    {
+		unsigned long long wt = ( (unsigned long long)fd.ftLastWriteTime.dwHighDateTime << 32 )
+			| fd.ftLastWriteTime.dwLowDateTime;
+
+		if( fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+		    continue;			/* also skips . and .. */
+
+		if( wt && now > wt && now - wt > cut )
+		{
+		    SAFE_SPRINTF( victim, "%s\\%s", dir, fd.cFileName );
+		    DeleteFileA( victim );
+		    pruned_count++;
+		}
+	    }
+	    while( FindNextFileA( h, &fd ) );
+
+	    FindClose( h );
+	}
+# else
+	{
+	    DIR *d = opendir( dir );
+	    struct dirent *e;
+	    time_t cut = time( 0 ) - (time_t)SC_PRUNE_DAYS * 24 * 3600;
+
+	    if( !d )
+			return pruned_count;
+
+	    while( ( e = readdir( d ) ) )
+	    {
+		size_t n = strlen( e->d_name );
+		struct stat st;
+
+		if( dl + 1 + (int)n >= (int)sizeof( victim ) )
+		    continue;
+
+		SAFE_SPRINTF( victim, "%s/%s", dir, e->d_name );
+
+		/* S_ISREG also disposes of . and .. */
+
+		if( !stat( victim, &st ) && S_ISREG( st.st_mode )
+		    && st.st_mtime < cut )
+		{
+		    unlink( victim );
+		    pruned_count++;
+		}
+	    }
+
+	    closedir( d );
+	}
+# endif
+	return pruned_count;
+}
+
 void
 statecache_save( void )
 {
@@ -958,8 +1207,9 @@ statecache_save( void )
 	    for( i = sc_incs; i; i = i->next )
 		if( i->existed && !i->sig_ok )
 		{
-		    fprintf( stderr, "jam: statecache: cannot fingerprint "
-			"parsed input '%s'; state not cached\n", i->name );
+		    if( sc_explicit || sc_debug() )
+			  fprintf( stderr, "jam: statecache: cannot fingerprint "
+				"parsed input '%s'; state not cached\n", i->name );
 		    sc_refuse = 1;
 		}
 	}
@@ -970,18 +1220,20 @@ statecache_save( void )
 	    RULE *inc = bindrule( "Includes" );
 	    if( inc->procedure && !sc_is_builtin_proc( inc->name, inc->procedure ) )
 	    {
-		fprintf( stderr, "jam: statecache: rule 'Includes' has an "
-		    "interpreted body (or overrides a builtin)\n" );
-		sc_refuse = 1;
+		    if( sc_explicit || sc_debug() )
+			  fprintf( stderr, "jam: statecache: rule 'Includes' has an "
+				"interpreted body (or overrides a builtin)\n" );
+			sc_refuse = 1;
 	    }
 	}
 	{
 	    RULE *na = bindrule( "null_action" );
 	    if( na->procedure && !sc_is_builtin_proc( na->name, na->procedure ) )
 	    {
-		fprintf( stderr, "jam: statecache: rule 'null_action' has an "
-		    "interpreted body (or overrides a builtin)\n" );
-		sc_refuse = 1;
+			if( sc_explicit || sc_debug() )
+			  fprintf( stderr, "jam: statecache: rule 'null_action' has an "
+				"interpreted body (or overrides a builtin)\n" );
+			sc_refuse = 1;
 	    }
 	}
 	if( sc_refuse )
@@ -1047,7 +1299,7 @@ statecache_save( void )
 	     * processes must never write the same temp file, and
 	     * readers must always see the old or the new cache */
 
-	    sprintf( tmp, "%s.%u.tmp", sc_path, (unsigned)sc_getpid() );
+	    SAFE_SPRINTF( tmp, "%s.%u.tmp", sc_path, (unsigned)sc_getpid() );
 
 	    sc_f = fopen( tmp, "wb" );
 	    if( sc_f )
@@ -1061,6 +1313,9 @@ statecache_save( void )
 		ok = !ferror( sc_f );
 		if( fclose( sc_f ) || !ok || sc_replace( tmp, sc_path ) )
 		    remove( tmp );
+		else if( DEBUG_MAKE )
+		    printf( " . parsed for %.2f sec (and saved to %s for %.2f sec)\n",
+		      sc_msig_diff_sec( sc_run_start, reft ), sc_path, sc_msig_diff_sec( reft, sc_now_msig() ) );
 	    }
 
 	    free( payload.p );
@@ -1072,8 +1327,13 @@ statecache_save( void )
 	free( sc_actid );
 	hashdone( sc_strhash );
 	sc_strhash = 0;
-	printf( " . parsed for %.2f sec (and saved to %s for %.2f sec)\n",
-  	sc_msig_diff_sec( sc_run_start, reft ), sc_path, sc_msig_diff_sec( reft, sc_now_msig() ) );
+	if( sc_msig_diff_sec( sc_run_start, reft ) > 0.6 )
+	{
+		reft = sc_now_msig();
+		int pruned = sc_prune();
+		if( DEBUG_MAKE && ( pruned > 0 || sc_msig_diff_sec( reft, sc_now_msig() ) > 0.1 ) )
+			printf( " . pruned %d obsolete cache files for %.2f sec\n", pruned, sc_msig_diff_sec( reft, sc_now_msig() ) );
+	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -1670,6 +1930,10 @@ statecache_try_load( const char *jamfile_name )
 	sc_loaded = 1;
 	success = 1;
 
+	/* this slot is in use: keep sc_prune() from ageing it out */
+
+	sc_touch();
+
     out:
 	free( echo );
 	sc_pv_free( &pv );
@@ -1709,5 +1973,8 @@ statecache_try_load( const char *jamfile_name )
 	free( seen );
 	free( data );
 
+	if ( DEBUG_MAKE && success )
+		printf( " . loaded parsed cache from %s for %.2f sec\n",
+		  sc_path, sc_msig_diff_sec( sc_run_start, sc_now_msig() ) );
 	return success;
 }
