@@ -14,8 +14,6 @@ if [ ! -d "$devtool_dir" ]; then
   echo Using Devtools at "$devtool_dir"
 fi
 
-echo Building jam and setting it up at "$devtool_dir"
-
 # force non-empty $_DEVTOOL, jamfiles will fail otherwise
 export _DEVTOOL=${_DEVTOOL:-$devtool_dir}
 export OSX_CPU_TYPE=`uname -m`
@@ -26,7 +24,9 @@ else
   jam_opt=
 fi
 
+if [ ! -f "./jam_0" ]; then
 cd jam_src
+echo "Building jam_0 first (since it is absent)..."
 mkdir -p _output
 c_opt='-pipe -x c -c -MD -Wno-error -Wno-trigraphs -Wno-multichar -Wno-parentheses -Wno-format-truncation -Wno-comment -DNDEBUG=1 -D_GNU_SOURCE -pthread -include ../prog/dagorInclude/supp/dag_compatibility_defines_posix.h'
 gcc $c_opt -o _output/builtins.o builtins.c
@@ -64,6 +64,9 @@ gcc $c_opt -o _output/outFilter.o outFilter.c
 g++ -pipe _output/builtins.o _output/changedPaths.o _output/fastre.o _output/depcache.o _output/strrules.o _output/statecache.o _output/prof.o _output/command.o _output/compile.o _output/expand.o _output/execdmc.o _output/fileunix.o _output/glob.o _output/hash.o _output/headers.o _output/jam.o _output/jambase.o _output/jamgram.o _output/lists.o _output/make.o _output/make1.o _output/newstr.o _output/option.o _output/parse.o _output/pathunix.o _output/regexp.o _output/rules.o _output/scan.o _output/search.o _output/variable.o _output/timestamp.o _output/outFilter.o -Wl,-lpthread -o ../jam_0
 rm -rf _output
 cd ..
+fi
+
+echo Building jam and setting it up at "$devtool_dir"
 rm ./jam
 ./jam_0 -sRoot=. -sOutDir=. $jam_opt -f jam_src/jamfile -a
 

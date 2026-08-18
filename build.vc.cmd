@@ -7,8 +7,12 @@ if not defined VSINSTALLDIR (
   exit /b 1
 )
 
+if not exist jam_0.exe (
 pushd jam_src
+echo "Building jam_0.exe first (since it is absent)..."
 cl -nologo -W0 -O2 -DNT -DWIN32 builtins.c command.c compile.c expand.c execdmc.c filent.c glob.c hash.c headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c newstr.c option.c parse.c pathunix.c  regexp.c rules.c scan.c search.c variable.c timestamp.c outFilter.c changedPaths.c fastre.c depcache.c strrules.c statecache.c prof.c user32.lib /Fe../jam_0.exe
 del *.obj
 popd
+)
+echo Building jam
 jam_0 -sRoot=. -sOutDir=. -f jam_src/jamfile -a
