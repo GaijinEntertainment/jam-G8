@@ -69,7 +69,7 @@ static void (*istat)( int );
 static struct
 {
 	int	pid; /* on win32, a real process handle */
-	void	(*func)( void *closure, int status );
+	void	(*func)( void *closure, int status, int );
 	void 	*closure;
 
 # ifdef USE_EXECNT
@@ -96,7 +96,7 @@ onintr( int disp )
 void
 execcmd( 
 	char *string,
-	void (*func)( void *closure, int status ),
+	void (*func)( void *closure, int status, int ),
 	void *closure,
 	LIST *shell )
 {
@@ -316,7 +316,7 @@ execwait()
 
 	cmdtab[ i ].pid = 0;
 
-	(*cmdtab[ i ].func)( cmdtab[ i ].closure, rstat );
+	(*cmdtab[ i ].func)( cmdtab[ i ].closure, rstat, 0 );
 
 	return 1;
 }

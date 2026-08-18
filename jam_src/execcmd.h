@@ -15,7 +15,7 @@ void exec_finish();
 
 void execcmd(
 	char *string,
-	void (*func)( void *closure, int status ),
+	void (*func)( void *closure, int status, int time_spent_msec ),
 	void *closure,
 	LIST *shell );
 

@@ -16,6 +16,7 @@
   #include <direct.h>
 #endif
 #endif
+#include "prof.h"
 
 #ifdef DOS386
 enum { MAX_CMDLINE_LEN = 128 };
@@ -33,12 +34,13 @@ enum { MAX_CMDLINE_LEN = 32768 };
  * execcmd() - launch an async command execution
  */
 struct ExecSlot {
-  void (*completition)( void *closure, int status );
+  void (*completition)( void *closure, int status, int time_spent_msec );
   void *closure;
   int  status;
   char *string;
   char *pending_goto;
   int useRespFile;
+  int time_spent_msec;
   ExecOutputFilter exec_out_filter;
 };
 
@@ -664,6 +666,7 @@ static void __cdecl exec_job_thread(void *p)
     goto end;
 
   // process command string
+  long long reft = perf_timer_now();
   prepare_execcmd(ctx);
   preprocess_string_slash(string);
   preprocess_string_backslash(string);
@@ -692,6 +695,7 @@ static void __cdecl exec_job_thread(void *p)
     string = pend;
   }
   finish_execcmd(ctx);
+  ctx->time_spent_msec = perf_timer_usec_since(reft) / 1000;
 
 end:
   if ( intr )
@@ -709,7 +713,7 @@ static const char *check_async_label(char *str)
     str ++;
   return strncmp(str, "#async", 6)==0 ? str+6 : NULL;
 }
-void execcmd( char *string, void (*func)( void *closure, int status ), void *closure,
+void execcmd( char *string, void (*func)( void *closure, int status, int time_spent_msec ), void *closure,
               LIST *shell )
 {
   int slot;
@@ -733,6 +737,7 @@ void execcmd( char *string, void (*func)( void *closure, int status ), void *clo
   exec_slots[slot].completition = func;
   exec_slots[slot].closure = closure;
   exec_slots[slot].status = 0;
+  exec_slots[slot].time_spent_msec = 0;
   exec_slots[slot].string = intr ? NULL : strdup(req_async ? req_async : string);
   string[0] = '\0';
 
@@ -756,7 +761,7 @@ void execcmd( char *string, void (*func)( void *closure, int status ), void *clo
  */
 int execwait()
 {
-  void (*compl)( void *, int );
+  void (*compl)( void *, int, int );
   int i, rstat;
 
   if( !cmdsrunning )
@@ -789,7 +794,7 @@ int execwait()
   compl = exec_slots[i].completition;
   exec_slots[i].completition = NULL;
 
-  compl ( exec_slots[i].closure, rstat );
+  compl ( exec_slots[i].closure, rstat, exec_slots[i].time_spent_msec );
 
   return 1;
 }

@@ -2,11 +2,93 @@
  * prof.c - lightweight profiling for jam (JAM_PROF builds only)
  */
 
+# include "prof.h"
+# include "jam.h"
+
+# if defined(OS_NT)
+# include <windows.h>
+static long long perf_timer_freq_ticks_per_usec = 0;
+static double perf_timer_freq = 0;
+
+static inline void setup_freq()
+{
+	LARGE_INTEGER f;
+	QueryPerformanceFrequency( &f );
+	perf_timer_freq_ticks_per_usec = f.QuadPart / 1000000ll;
+	if( !perf_timer_freq_ticks_per_usec )
+		perf_timer_freq_ticks_per_usec = 1;
+	perf_timer_freq = (double)f.QuadPart;
+}
+
+long long perf_timer_now( void )
+{
+	LARGE_INTEGER li;
+	QueryPerformanceCounter( &li );
+	return li.QuadPart;
+}
+
+double perf_timer_ticks2sec( long long t )
+{
+	if( !perf_timer_freq_ticks_per_usec )
+		setup_freq();
+	return (double)t / perf_timer_freq;
+}
+
+long long perf_timer_ticks2usec( long long t )
+{
+	if( !perf_timer_freq_ticks_per_usec )
+		setup_freq();
+	return t / perf_timer_freq_ticks_per_usec;
+}
+
+# elif defined(OS_MACOSX)
+# include <mach/mach_time.h>
+
+static long long perf_timer_numer = 0;	/* ticks -> ns: * numer / denom */
+static long long perf_timer_denom = 1;
+
+static void setup_timebase( void )
+{
+	mach_timebase_info_data_t tb;
+
+	/* preset, so a failing call leaves ticks == nanoseconds */
+	tb.numer = tb.denom = 1;
+	mach_timebase_info( &tb );
+
+	perf_timer_numer = tb.numer ? tb.numer : 1;
+	perf_timer_denom = tb.denom ? tb.denom : 1;
+}
+
+long long perf_timer_now( void ) { return (long long)mach_absolute_time(); }
+double perf_timer_ticks2sec( long long t )
+{
+	if( !perf_timer_numer )
+		setup_timebase();
+	return (double)( t * perf_timer_numer ) / (double)perf_timer_denom / 1e9;
+}
+long long perf_timer_ticks2usec( long long t )
+{
+	if( !perf_timer_numer )
+		setup_timebase();
+	return t * perf_timer_numer / perf_timer_denom / 1000ll;
+}
+
+# else
+# include <unistd.h>
+long long perf_timer_now( void )
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000000ll + ts.tv_nsec / 1000ll;
+}
+double perf_timer_ticks2sec( long long t ) { return (double)t / 1e6; }
+long long perf_timer_ticks2usec( long long t ) { return t; }
+# endif
+
 #ifdef JAM_PROF
 
 # include <stdio.h>
 # include <windows.h>
-# include "prof.h"
 
 PROFSLOT prof_slots[PROF_MAX] = {
 	{ "parse" },
@@ -30,26 +112,6 @@ PROFSLOT prof_slots[PROF_MAX] = {
 	{ "  deprule xform" },
 	{ "  deprule finish" },
 };
-
-static double prof_freq;
-
-long long prof_now( void )
-{
-	LARGE_INTEGER li;
-	QueryPerformanceCounter( &li );
-	return li.QuadPart;
-}
-
-double prof_ticks2sec( long long t )
-{
-	if( !prof_freq )
-	{
-	    LARGE_INTEGER f;
-	    QueryPerformanceFrequency( &f );
-	    prof_freq = (double)f.QuadPart;
-	}
-	return (double)t / prof_freq;
-}
 
 void prof_dump( void )
 {

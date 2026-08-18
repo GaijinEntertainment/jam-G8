@@ -48,13 +48,13 @@
 void
 execcmd( 
 	char *string,
-	void (*func)( void *closure, int status ),
+	void (*func)( void *closure, int status, int ),
 	void *closure,
 	LIST *shell )
 {
 	
 	printf( "%s", string );
-	(*func)( closure, EXEC_CMD_OK );
+	(*func)( closure, EXEC_CMD_OK, 0 );
 }
 
 /*

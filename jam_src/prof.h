@@ -9,6 +9,12 @@
 #ifndef JAM_PROF_H
 #define JAM_PROF_H
 
+long long perf_timer_now( void );
+long long perf_timer_ticks2usec( long long t );
+double perf_timer_ticks2sec( long long t );
+
+static inline long long perf_timer_usec_since( long long reft ) { return perf_timer_ticks2usec( perf_timer_now() - reft ); }
+
 #ifdef JAM_PROF
 
 typedef struct {
@@ -46,7 +52,7 @@ enum {
 
 extern PROFSLOT prof_slots[PROF_MAX];
 
-long long prof_now( void );
+static inline long long prof_now( void ) { return perf_timer_now(); }
 void prof_dump( void );
 
 #define PROF_ENTER( i ) do { PROFSLOT *_p = &prof_slots[i]; _p->count++; \
@@ -58,7 +64,7 @@ void prof_dump( void );
 #define PROF_COUNT( i ) ( prof_slots[i].count++ )
 #define PROF_AUX( i, n ) ( prof_slots[i].aux += (n) )
 
-double prof_ticks2sec( long long t );
+static inline double prof_ticks2sec( long long t ) { return perf_timer_ticks2sec(t); }
 
 #else
 

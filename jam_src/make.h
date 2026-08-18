@@ -11,4 +11,4 @@
  */
 
 int make( int n_targets, const char **targets, int anyhow );
-int make1( TARGET *t );
+int make1( TARGET *t, int total_targets_to_update );

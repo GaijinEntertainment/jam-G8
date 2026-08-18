@@ -164,6 +164,7 @@ struct _target {
 	char		*cmds;		/* type-punned command list */
 
 	int		walk_gen;	/* visited marker for changedPaths walk */
+	int		time_spent_msec;/* total time spent in execcmd() for this target's commands */
 } ;
 
 RULE 	*bindrule( const char *rulename );

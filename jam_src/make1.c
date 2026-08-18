@@ -61,11 +61,16 @@
 # include "make.h"
 # include "command.h"
 # include "execcmd.h"
+# include "prof.h"
+# ifdef OS_NT
+# include <windows.h>
+# include <io.h>
+# endif
 
 static void make1a( TARGET *t, TARGET *parent );
 static void make1b( TARGET *t );
 static void make1c( TARGET *t );
-static void make1d( void *closure, int status );
+static void make1d( void *closure, int status, int time_spent_msec );
 
 static CMD *make1cmds( ACTIONS *a0 );
 static LIST *make1list( LIST *l, TARGETS *targets, int flags );
@@ -79,6 +84,9 @@ static struct {
 	int	skipped;
 	int	total;
 	int	made;
+	int totalToUpdate;
+	unsigned perfDoneTargets;
+	unsigned long long perfDoneTargetsTimeMsec;
 } counts[1] ;
 
 /*
@@ -86,11 +94,100 @@ static struct {
  */
 
 static int intr = 0;
+static long long build_start_reft = 0;
+static long long last_report_reft = 0;
+static int last_report_done_targets = 0;
+static int tty_colored = -1;
+
+# ifdef OS_NT
+static HANDLE tty_vt_enabled_by_us = INVALID_HANDLE_VALUE;
+
+static void tty_restore_mode( void )
+{
+	DWORD mode;
+
+	if( tty_vt_enabled_by_us == INVALID_HANDLE_VALUE )
+	    return;
+
+	if( GetConsoleMode( tty_vt_enabled_by_us, &mode ) )
+	    SetConsoleMode( tty_vt_enabled_by_us, mode & ~ENABLE_VIRTUAL_TERMINAL_PROCESSING );
+
+	tty_vt_enabled_by_us = INVALID_HANDLE_VALUE;
+}
+# endif
+
+static void tty_check_colored()
+{
+# ifdef OS_NT
+	HANDLE h = (HANDLE)_get_osfhandle( _fileno( stdout ) );
+	DWORD mode;
+
+	tty_colored = 0;
+
+	if( h == INVALID_HANDLE_VALUE || !GetConsoleMode( h, &mode ) )
+	    return; /* not a console: no colours */
+
+	if( mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING )
+	{
+	    tty_colored = 1; /* the host enabled it: leave it be */
+	    return;
+	}
+
+	if( !SetConsoleMode( h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING ) )
+	    return; /* console too old for VT */
+
+	tty_vt_enabled_by_us = h;
+	atexit( tty_restore_mode );
+	tty_colored = 1;
+# else
+	tty_colored = isatty( fileno( stdout ) ) != 0;
+# endif
+}
+static const char *tty_green_text_string()
+{
+	if (tty_colored < 0)
+	  tty_check_colored();
+	return (tty_colored > 0) ? "\033[32m" : "";
+}
+static const char *tty_reset_text_color_string()
+{
+	if (tty_colored < 0)
+	  tty_check_colored();
+	return (tty_colored > 0) ? "\033[0m" : "";
+}
+
+static const char *seconds2str(char *buf, int buflen, double t_sec)
+{
+	if( t_sec > 3600.0 )
+	{
+		int t = (int)( t_sec + 0.5 );
+		_snprintf( buf, buflen, "%d:%02d:%02d", t / 3600, ( t % 3600 ) / 60, t % 60 );
+	}
+	else if( t_sec > 60.0 )
+	{
+		int t = (int)( t_sec + 0.5 );
+		_snprintf( buf, buflen, "%d:%02d", t / 60, t % 60 );
+	}
+	else
+		_snprintf( buf, buflen, "%.1f sec", t_sec );
+	return buf;
+}
 
 int
-make1( TARGET *t )
+make1( TARGET *t, int total_targets_to_update )
 {
-	memset( (char *)counts, 0, sizeof( *counts ) );
+	int base_failed = 0, base_skipped = 0, base_made = 0, base_total = 0;
+	static int run_started = 0;
+	if( !run_started )
+	{
+	    run_started = 1;
+	    memset( (char *)counts, 0, sizeof( *counts ) );
+	    counts->totalToUpdate = total_targets_to_update;
+	    build_start_reft = last_report_reft = perf_timer_now();
+	    last_report_done_targets = 0;
+	}
+	else
+  	base_failed = counts->failed, base_skipped = counts->skipped, base_made = counts->made, base_total = counts->total;
 
 	/* Recursively make the target and its dependents */
 
@@ -103,16 +200,16 @@ make1( TARGET *t )
 
 	/* Talk about it */
 
-	if( DEBUG_MAKE && counts->failed )
-	    printf( "...failed updating %d target(s)...\n", counts->failed );
+	if( DEBUG_MAKE && counts->failed > base_failed )
+	    printf( "...failed updating %d target(s)...\n", counts->failed - base_failed );
 
-	if( DEBUG_MAKE && counts->skipped )
-	    printf( "...skipped %d target(s)...\n", counts->skipped );
+	if( DEBUG_MAKE && counts->skipped > base_skipped )
+	    printf( "...skipped %d target(s)...\n", counts->skipped - base_skipped );
 
-	if( DEBUG_MAKE && counts->made )
-	    printf( "...updated %d target(s)...\n", counts->made );
+	if( DEBUG_MAKE && counts->made > base_made )
+	    printf( "...updated %d target(s)...\n", counts->made - base_made );
 
-	return counts->total != counts->made;
+	return ( counts->total - base_total ) != ( counts->made - base_made );
 }
 
 /*
@@ -237,8 +334,25 @@ make1b( TARGET *t )
 	    {
 		++counts->total;
 
-		if( DEBUG_MAKE && !( counts->total % 100 ) )
-		    printf( "...on %dth target...\n", counts->total );
+		if( DEBUG_MAKE && ( !( counts->total % 1000 ) && ( globs.noexec || perf_timer_usec_since( last_report_reft ) > 50 * 1000 ) ) )
+		{
+		    int tgt_left = counts->totalToUpdate - counts->made;
+		    if(  globs.noexec )
+		      printf( "...on %dth target...\n", counts->total );
+		    else if( !counts->perfDoneTargets )
+		      printf( "...on %dth target (%d targets pending)...\n", counts->total, counts->totalToUpdate - counts->total );
+		    else if (tgt_left)
+		    {
+		      char tbuf[16];
+		      int threads = globs.jobs <= 1 ? 1 : (tgt_left > globs.jobs ? globs.jobs : tgt_left);
+		      printf( "%s...on %dth target (%d targets pending), %d%% done,  ETA: %s to build %d targets...%s\n",
+		        tty_green_text_string(), counts->total, counts->totalToUpdate - counts->total,
+		        (counts->totalToUpdate - tgt_left) * 100 / counts->totalToUpdate,
+		        seconds2str( tbuf, sizeof( tbuf ), (counts->perfDoneTargetsTimeMsec / 1000.0) * tgt_left / counts->perfDoneTargets / threads ),
+		        tgt_left, tty_reset_text_color_string() );
+		    }
+		    last_report_reft = perf_timer_now();
+		}
 
 		pushsettings( t->settings );
 		t->cmds = (char *)make1cmds( t->actions );
@@ -293,7 +407,7 @@ make1c( TARGET *t )
 
 	    if( globs.noexec )
 	    {
-		make1d( t, EXEC_CMD_OK );
+		make1d( t, EXEC_CMD_OK, 0 );
 	    } 
 	    else
 	    {
@@ -323,6 +437,25 @@ make1c( TARGET *t )
 	    {
 	    case EXEC_CMD_OK:
 		++counts->made;
+		if( t->time_spent_msec > 0 )
+		{
+			counts->perfDoneTargets ++;
+			counts->perfDoneTargetsTimeMsec += t->time_spent_msec;
+			int tgt_left = counts->totalToUpdate - counts->made;
+			if( DEBUG_MAKE && tgt_left > 0 && counts->perfDoneTargets > 10 && last_report_done_targets < counts->perfDoneTargets &&
+			    perf_timer_usec_since( last_report_reft ) > 10 * 1000 * 1000 )
+			{
+				char tbuf1[16], tbuf2[16];
+				int threads = globs.jobs <= 1 ? 1 : (tgt_left > globs.jobs ? globs.jobs : tgt_left);
+				printf( "%s... %d%% done (%d targets),  ETA: %s to build %d targets [%s passed] ...%s\n",
+				  tty_green_text_string(), (counts->totalToUpdate - tgt_left) * 100 / counts->totalToUpdate, counts->made,
+				  seconds2str(tbuf1, sizeof(tbuf1), (counts->perfDoneTargetsTimeMsec / 1000.0) * tgt_left / counts->perfDoneTargets / threads),
+				  tgt_left, seconds2str(tbuf2, sizeof(tbuf2), perf_timer_ticks2sec( perf_timer_now() - build_start_reft ) ),
+				  tty_reset_text_color_string() );
+				last_report_reft = perf_timer_now();
+				last_report_done_targets = counts->perfDoneTargets;
+			}
+		}
 		break;
 	    case EXEC_CMD_FAIL:
 		++counts->failed;
@@ -345,7 +478,8 @@ make1c( TARGET *t )
 static void
 make1d( 
 	void	*closure,
-	int	status )
+	int	status,
+	int time_spent_msec )
 {
 	TARGET	*t = (TARGET *)closure;
 	CMD	*cmd = (CMD *)t->cmds;
@@ -391,6 +525,7 @@ make1d(
 
 	/* Free this command and call make1c() to move onto next command. */
 
+	t->time_spent_msec += time_spent_msec;
 	t->status = status;
 	t->cmds = (char *)cmd_next( cmd );
 

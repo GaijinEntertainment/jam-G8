@@ -117,6 +117,8 @@ static const char *target_bind[] =
   #define clock() time(NULL)*CLOCKS_PER_SEC
 #endif
 
+static long long last_report_reft = 0;
+
 int
 make( 
 	int		n_targets,
@@ -127,6 +129,8 @@ make(
 	COUNTS counts[1];
 	int status = 0;		/* 1 if anything fails */
 	clock_t t0 = clock(), t1, t2;
+	last_report_reft = perf_timer_now();
+
 
 	memset( (char *)counts, 0, sizeof( *counts ) );
 
@@ -187,7 +191,7 @@ make(
 
 	PROF_ENTER( PROF_MAKE1 );
 	for( i = 0; i < n_targets; i++ )
-	    status |= make1( bindtarget( targets[i] ) );
+	    status |= make1( bindtarget( targets[i] ), counts->updating );
 	PROF_LEAVE( PROF_MAKE1 );
 
 	t2 = clock();
@@ -510,8 +514,14 @@ make0(
 	if( t->flags & T_FLAG_INTERNAL )
 	    return;
 
-	if( !( ++counts->targets % 1000 ) && DEBUG_MAKE )
-	    printf( "...patience...\n" );
+	if( !( ++counts->targets % 1000 ) && DEBUG_MAKE && ( globs.noexec || perf_timer_usec_since( last_report_reft ) > 1000000 ) )
+	{
+	  if( globs.noexec )
+			printf( "...patience...\n" );
+		else
+			printf( "...patience (%d targets)...\n", counts->targets );
+		last_report_reft = perf_timer_now();
+	}
 
 	if( fate == T_FATE_ISTMP )
 	    counts->temp++;

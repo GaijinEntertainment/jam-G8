@@ -50,7 +50,7 @@ char tempnambuf[ L_tmpnam + 1 + 4 ] = {0};
 void
 execcmd( 
 	char *string,
-	void (*func)( void *closure, int status ),
+	void (*func)( void *closure, int status, int ),
 	void *closure,
 	LIST *shell )
 {
@@ -90,7 +90,7 @@ execcmd(
 	    if( !( f = fopen( tempnambuf + 1, "w" ) ) )
 	    {
 		printf( "can't open command file\n" );
-		(*func)( closure, EXEC_CMD_FAIL );
+		(*func)( closure, EXEC_CMD_FAIL, 0 );
 		return;
 	    }
 
@@ -156,7 +156,7 @@ execcmd(
 	if( status == 2 || status == 4 )
 	    rstat = EXEC_CMD_FAIL;
 
-	(*func)( closure, rstat );
+	(*func)( closure, rstat, 0 );
 }
 
 int 
